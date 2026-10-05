@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mixdeck — make music with anyone</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script>
+/* =========================================================
+   CONFIG — paste your ritwik-demo project API key below,
+   or open the site once with ?key=YOUR_KEY (it is remembered).
+   ========================================================= */
+window.MIXDECK_CONFIG = {
+  apiKey: "",            // main project, e.g. "Mixdeck Web"
+  satelliteKey: "",      // optional 2nd project for the Portfolio demo, e.g. "Mixdeck Studio Pro"
+  serverZone: "US"       // "US" or "EU" — match the demo org
+};
+(function(){
+  var p = new URLSearchParams(location.search);
+  try {
+    if (p.get('key')) localStorage.setItem('mixdeck_key', p.get('key'));
+    if (p.get('sat')) localStorage.setItem('mixdeck_sat', p.get('sat'));
+    window.MIXDECK_CONFIG.apiKey = window.MIXDECK_CONFIG.apiKey || localStorage.getItem('mixdeck_key') || "";
+    window.MIXDECK_CONFIG.satelliteKey = window.MIXDECK_CONFIG.satelliteKey || localStorage.getItem('mixdeck_sat') || "";
+  } catch(e){}
+  var key = window.MIXDECK_CONFIG.apiKey;
+  if (!key) return;
+  // Unified Script (Analytics + Session Replay + Web Experiment) and Guides & Surveys must load in order, synchronously.
+  document.write('<script src="https://cdn.amplitude.com/script/' + key + '.js"><\/script>');
+  document.write('<script src="https://cdn.amplitude.com/script/' + key + '.engagement.js"><\/script>');
+})();
+</script>
+<script>
+(function(){
+  var cfg = window.MIXDECK_CONFIG;
+  if (!cfg.apiKey || !window.amplitude) return;
+  try {
+    window.amplitude.add(window.sessionReplay.plugin({ sampleRate: 1 }));
+    if (window.engagement) window.amplitude.add(window.engagement.plugin());
+    window.amplitude.init(cfg.apiKey, {
+      serverZone: cfg.serverZone,
+      fetchRemoteConfig: true,
+      autocapture: {
+        attribution: true, sessions: true, formInteractions: true, fileDownloads: true,
+        elementInteractions: true, frustrationInteractions: true, webVitals: true, networkTracking: true,
+        pageViews: { trackHistoryChanges: 'all' }
+      }
+    });
+  } catch (e) { console.warn('Amplitude init failed', e); }
+})();
+</script>
+<style>
+:root{
+  --console:#E6E9EE; --panel:#FFFFFF; --ink:#14213D; --ink-2:#4A5568;
+  --rule:#C9D0DA; --rec:#E63946; --wave:#1F9E89; --wave-2:#7FD1C2; --amber:#F4A259;
+  --radius-s:6px; --radius-l:18px;
+  --display:"Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
+  --body:"IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --console:#10172A; --panel:#18213A; --ink:#EEF1F7; --ink-2:#A8B3C7; --rule:#2C3756; }
+}
+:root[data-theme="dark"]{ --console:#10172A; --panel:#18213A; --ink:#EEF1F7; --ink-2:#A8B3C7; --rule:#2C3756; }
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--console);color:var(--ink);font:400 16px/1.55 var(--body);
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+a{color:inherit}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--wave);outline-offset:2px}
+.wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+
+/* top bar */
+header.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--console);border-bottom:1px solid var(--rule)}
+.bar .wrap{display:flex;align-items:center;gap:28px;height:64px}
+.logo{font:800 22px/1 var(--display);letter-spacing:-.02em;text-decoration:none;display:flex;align-items:center;gap:10px}
+.logo i{width:12px;height:12px;border-radius:50%;background:var(--rec);box-shadow:0 0 0 4px rgba(230,57,70,.18)}
+nav{display:flex;gap:4px;flex-wrap:wrap}
+nav a{text-decoration:none;padding:8px 12px;border-radius:var(--radius-s);color:var(--ink-2);font-weight:500}
+nav a[aria-current="page"]{color:var(--ink);background:var(--panel)}
+.bar .who{margin-left:auto;font-size:14px;color:var(--ink-2)}
+.bar .who b{color:var(--ink)}
+
+main section.view{display:none;padding:48px 0 80px}
+main section.view.on{display:block}
+h1,h2,h3{font-family:var(--display);letter-spacing:-.02em;margin:0}
+h1{font-size:clamp(40px,6vw,76px);line-height:.98;font-weight:800}
+h2{font-size:clamp(28px,3.4vw,40px);line-height:1.05;font-weight:700}
+h3{font-size:20px;font-weight:700}
+p.lede{font-size:19px;color:var(--ink-2);max-width:56ch}
+
+.btn{text-decoration:none;white-space:nowrap;display:inline-flex;align-items:center;gap:10px;border:0;border-radius:999px;padding:12px 22px;font-weight:600;cursor:pointer;background:var(--ink);color:var(--console)}
+.btn.rec{background:var(--rec);color:#fff}
+.btn.ghost{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--ink)}
+.btn.sm{padding:8px 14px;font-size:14px}
+
+/* hero: the mixing desk */
+.hero{display:grid;grid-template-columns:1.05fr 1fr;gap:48px;align-items:center}
+.desk{background:var(--ink);border-radius:var(--radius-l);padding:22px;color:#EEF1F7}
+.desk .lane{display:grid;grid-template-columns:96px 1fr;align-items:center;gap:14px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.08)}
+.desk .lane:last-child{border-bottom:0}
+.desk .lane span{font-size:13px;color:#A8B3C7}
+.desk svg{width:100%;height:38px;display:block}
+.desk .transport{display:flex;gap:10px;align-items:center;margin-top:14px;font-size:13px;color:#A8B3C7}
+.desk .dot{width:10px;height:10px;border-radius:50%;background:var(--rec);animation:blink 1.4s steps(2) infinite}
+@keyframes blink{50%{opacity:.25}}
+@media (prefers-reduced-motion: reduce){.desk .dot{animation:none}}
+
+.tracks{margin-top:56px}
+.tracklist{list-style:none;padding:0;margin:20px 0 0;border-top:1px solid var(--rule)}
+.tracklist li{display:grid;grid-template-columns:44px 1fr auto auto;gap:16px;align-items:center;padding:14px 0;border-bottom:1px solid var(--rule)}
+.play{width:40px;height:40px;border-radius:50%;border:0;background:var(--panel);cursor:pointer;display:grid;place-items:center}
+.play svg{width:14px;height:14px}
+.meta small{display:block;color:var(--ink-2);font-size:13px}
+.genre{font-size:13px;color:var(--ink-2)}
+
+/* studio */
+.studio{display:grid;grid-template-columns:1fr 320px;gap:24px;margin-top:28px}
+.board{background:var(--panel);border-radius:var(--radius-l);padding:18px}
+.board .row{display:grid;grid-template-columns:150px 1fr 120px;gap:14px;align-items:center;padding:12px 0;border-bottom:1px solid var(--rule)}
+.board .row:last-of-type{border-bottom:0}
+.inst{font-weight:600}.inst small{display:block;font-weight:400;color:var(--ink-2);font-size:13px}
+.clip{height:40px;border-radius:var(--radius-s);background:repeating-linear-gradient(90deg,var(--wave-2) 0 3px,transparent 3px 6px);opacity:.85}
+.clip.empty{background:none;border:1.5px dashed var(--rule)}
+.side{display:flex;flex-direction:column;gap:16px}
+.card{background:var(--panel);border-radius:var(--radius-l);padding:18px}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+.field{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.field label{font-size:14px;font-weight:600}
+.field input,.field select,.field textarea{background:var(--console);border:1px solid var(--rule);border-radius:var(--radius-s);padding:10px 12px}
+
+/* membership */
+.plans{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:36px}
+.plan{background:var(--panel);border-radius:var(--radius-l);padding:28px;display:flex;flex-direction:column;gap:14px}
+.plan.featured{box-shadow:inset 0 0 0 2px var(--ink)}
+.price{font:800 44px/1 var(--display)}
+.price small{font:500 15px var(--body);color:var(--ink-2)}
+.plan ul{margin:0;padding-left:18px;color:var(--ink-2)}
+.promo{display:flex;gap:10px;margin-top:6px}
+.promo input{flex:1}
+
+/* AI chat */
+.chat{background:var(--panel);border-radius:var(--radius-l);padding:18px;margin-top:28px;max-width:760px}
+.msgs{display:flex;flex-direction:column;gap:12px;min-height:220px;max-height:420px;overflow:auto;padding:4px}
+.msg{max-width:80%;padding:12px 14px;border-radius:14px}
+.msg.me{align-self:flex-end;background:var(--ink);color:var(--console)}
+.msg.bot{align-self:flex-start;background:var(--console)}
+.rate{display:flex;gap:8px;margin-top:8px}
+.ask{display:flex;gap:10px;margin-top:14px}
+.ask input{flex:1;background:var(--console);border:1px solid var(--rule);border-radius:999px;padding:12px 16px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.chip{border:1px solid var(--rule);background:transparent;border-radius:999px;padding:6px 12px;font-size:14px;cursor:pointer}
+
+/* control room */
+.control{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:28px}
+.log{font:13px/1.5 var(--body);background:var(--console);border-radius:var(--radius-s);padding:12px;height:180px;overflow:auto;white-space:pre-wrap}
+.status{display:inline-block;padding:4px 10px;border-radius:999px;font-size:13px;font-weight:600}
+.status.ok{background:rgba(31,158,137,.15);color:var(--wave)}
+.status.off{background:rgba(230,57,70,.12);color:var(--rec)}
+progress{width:100%;height:10px}
+
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--console);padding:12px 18px;border-radius:999px;opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.show{opacity:1}
+dialog{border:0;border-radius:var(--radius-l);padding:28px;max-width:420px;width:calc(100% - 32px);background:var(--panel);color:var(--ink)}
+dialog::backdrop{background:rgba(20,33,61,.45)}
+footer{border-top:1px solid var(--rule);padding:24px 0;color:var(--ink-2);font-size:14px}
+
+@media (max-width:860px){
+  .hero,.studio,.plans,.control{grid-template-columns:1fr}
+  .board .row{grid-template-columns:100px 1fr 110px}
+  .bar .who{display:none}
+  nav{overflow-x:auto;flex-wrap:nowrap}
+}
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="wrap">
+    <a class="logo" href="#/" aria-label="Mixdeck home"><i></i>Mixdeck</a>
+    <nav aria-label="Main">
+      <a href="#/" data-route="discover">Discover</a>
+      <a href="#/studio" data-route="studio">Studio</a>
+      <a href="#/mastering" data-route="mastering">Mastering</a>
+      <a href="#/songstarter" data-route="songstarter">SongStarter AI</a>
+      <a href="#/membership" data-route="membership">Membership</a>
+    </nav>
+    <div class="who" id="who">Browsing as guest</div>
+  </div>
+</header>
+
+<main class="wrap">
+
+<!-- DISCOVER -->
+<section class="view" data-view="discover" aria-labelledby="h-discover">
+  <div class="hero">
+    <div>
+      <h1 id="h-discover">Make music with anyone, anywhere.</h1>
+      <p class="lede">Record a beat on your phone, finish it on your laptop, and release it to fans the same night. Mixdeck keeps the whole song in one place.</p>
+      <div class="toolbar">
+        <a class="btn rec" id="hero-start-cta" href="#/studio" data-track="Create Project Clicked" data-source="hero">Start a new song</a>
+        <button class="btn ghost" id="hero-signin" type="button">Sign in</button>
+      </div>
+    </div>
+    <div class="desk" aria-hidden="true">
+      <div class="lane"><span>Drums</span><svg viewBox="0 0 300 38" id="w1"></svg></div>
+      <div class="lane"><span>Bass</span><svg viewBox="0 0 300 38" id="w2"></svg></div>
+      <div class="lane"><span>Keys</span><svg viewBox="0 0 300 38" id="w3"></svg></div>
+      <div class="lane"><span>Vocals</span><svg viewBox="0 0 300 38" id="w4"></svg></div>
+      <div class="transport"><i class="dot"></i> 3 collaborators recording · 92 BPM · C minor</div>
+    </div>
+  </div>
+
+  <div class="tracks">
+    <h2>Trending this week</h2>
+    <ul class="tracklist" id="trending"></ul>
+  </div>
+</section>
+
+<!-- STUDIO -->
+<section class="view" data-view="studio" aria-labelledby="h-studio">
+  <h2 id="h-studio">Untitled song</h2>
+  <p class="lede">Add a track, hit record, and invite a friend to play the next part.</p>
+  <div class="studio">
+    <div class="board" id="board">
+      <div class="row"><div class="inst">Drums<small>Drum machine</small></div><div class="clip"></div><button class="btn sm ghost" data-rec="Drums" type="button">Re-record</button></div>
+      <div class="row"><div class="inst">Bass<small>Electric bass</small></div><div class="clip empty"></div><button class="btn sm rec" data-rec="Bass" type="button">Record</button></div>
+      <div class="toolbar">
+        <button class="btn sm ghost" id="add-track-btn" type="button">Add track</button>
+        <button class="btn sm ghost" id="invite-btn" type="button">Invite collaborator</button>
+        <button class="btn sm" id="publish-btn" type="button">Publish song</button>
+      </div>
+    </div>
+    <aside class="side">
+      <div class="card">
+        <h3>Stuck on the next part?</h3>
+        <p style="color:var(--ink-2);margin:.4em 0 1em">SongStarter suggests chords, a beat or a hook for what you have so far.</p>
+        <a class="btn sm" id="studio-ai-cta" href="#/songstarter" data-track="SongStarter Opened" data-source="studio">Open SongStarter</a>
+      </div>
+      <div class="card">
+        <h3>Finish it properly</h3>
+        <p style="color:var(--ink-2);margin:.4em 0 1em">Mastering makes your song sound right on every speaker.</p>
+        <a class="btn sm ghost" id="studio-master-cta" href="#/mastering" data-track="Mastering Opened" data-source="studio">Master this song</a>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- MASTERING -->
+<section class="view" data-view="mastering" aria-labelledby="h-master">
+  <h2 id="h-master">Master your song</h2>
+  <p class="lede">Pick a sound. You can compare it with the original before you export.</p>
+  <div class="plans" style="grid-template-columns:repeat(3,1fr)" id="presets"></div>
+  <div class="toolbar" style="margin-top:24px">
+    <button class="btn rec" id="master-btn" type="button">Master song</button>
+    <button class="btn ghost" id="export-btn" type="button">Export WAV</button>
+  </div>
+</section>
+
+<!-- SONGSTARTER AI -->
+<section class="view" data-view="songstarter" aria-labelledby="h-ai">
+  <h2 id="h-ai">SongStarter AI</h2>
+  <p class="lede">Describe the song you want. SongStarter writes a starting point you can open in the Studio.</p>
+  <div class="chat">
+    <div class="msgs" id="msgs" aria-live="polite"></div>
+    <div class="chips" id="chips"></div>
+    <form class="ask" id="ask">
+      <label for="prompt" class="sr" style="position:absolute;left:-9999px">Describe your song</label>
+      <input id="prompt" autocomplete="off" placeholder="A lo-fi beat for late-night studying">
+      <button class="btn" type="submit">Generate</button>
+    </form>
+  </div>
+</section>
+
+<!-- MEMBERSHIP -->
+<section class="view" data-view="membership" aria-labelledby="membership-headline">
+  <h1 id="membership-headline" style="font-size:clamp(36px,5vw,60px)">Sound like you meant it.</h1>
+  <p class="lede" id="membership-subhead">Membership unlocks unlimited mastering, pro instruments and early access to new effects.</p>
+  <div class="plans">
+    <div class="plan" id="plan-free">
+      <h3>Free</h3>
+      <div class="price">$0<small> forever</small></div>
+      <ul><li>Unlimited projects</li><li>3 masters a month</li><li>Core instruments</li></ul>
+      <button class="btn ghost" id="free-cta" type="button">Keep free plan</button>
+    </div>
+    <div class="plan featured" id="plan-member">
+      <h3>Membership</h3>
+      <div class="price" id="member-price">$14.95<small> a month</small></div>
+      <ul><li>Unlimited mastering</li><li>Pro instruments and effects</li><li>Release to streaming platforms</li><li>Priority collaboration rooms</li></ul>
+      <button class="btn rec" id="trial-cta" type="button">Start 7-day free trial</button>
+      <div class="promo">
+        <label for="promo-code" style="position:absolute;left:-9999px">Promo code</label>
+        <input id="promo-code" placeholder="Promo code" class="field" style="margin:0;background:var(--console);border:1px solid var(--rule);border-radius:var(--radius-s);padding:10px 12px">
+        <button class="btn sm ghost" id="promo-apply" type="button">Apply</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CONTROL ROOM (presenter only) -->
+<section class="view" data-view="control" aria-labelledby="h-control">
+  <h2 id="h-control">Control room</h2>
+  <p class="lede">Presenter tools. Not linked from the navigation — open <code>#/control</code> directly.</p>
+  <div class="control">
+    <div class="card">
+      <h3>Connection</h3>
+      <p>Main project: <span id="st-main" class="status off">not set</span><br>Satellite project: <span id="st-sat" class="status off">not set</span></p>
+      <div class="field"><label for="k-main">Main project API key</label><input id="k-main" autocomplete="off"></div>
+      <div class="field"><label for="k-sat">Satellite project API key (optional, for Portfolio)</label><input id="k-sat" autocomplete="off"></div>
+      <button class="btn sm" id="save-keys" type="button">Save and reload</button>
+      <hr style="border:0;border-top:1px solid var(--rule);margin:20px 0">
+      <h3>Who am I on stage?</h3>
+      <div class="field"><label for="persona">Sign in as</label>
+        <select id="persona">
+          <option value="demo.creator@mixdeck.app|Free|Singapore|Web">Free creator, Singapore</option>
+          <option value="demo.member@mixdeck.app|Membership|India|Web">Paying member, India</option>
+          <option value="demo.newbie@mixdeck.app|Free|Australia|Web">First-week creator, Australia</option>
+        </select></div>
+      <div class="toolbar"><button class="btn sm" id="signin-persona" type="button">Sign in</button><button class="btn sm ghost" id="reset-id" type="button">Sign out and reset</button></div>
+    </div>
+    <div class="card">
+      <h3>Seed history</h3>
+      <p style="color:var(--ink-2)">Sends synthetic creators and 30 days of activity through the HTTP API so charts, cohorts and predictions have something to show. Run it a day before the call.</p>
+      <div class="field"><label for="n-users">Creators</label><input id="n-users" type="number" min="50" max="3000" value="600"></div>
+      <div class="field"><label for="seed-target">Send to</label>
+        <select id="seed-target"><option value="main">Main project</option><option value="both">Main and satellite projects</option></select></div>
+      <button class="btn sm rec" id="seed-btn" type="button">Seed history</button>
+      <progress id="seed-prog" value="0" max="100" style="margin-top:14px"></progress>
+      <div class="log" id="log" aria-live="polite"></div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer><div class="wrap">Mixdeck is a fictional product built for an Amplitude demo. No real user data.</div></footer>
+
+<dialog id="checkout">
+  <h3>Start your free trial</h3>
+  <p style="color:var(--ink-2)">You won’t be charged for 7 days. Cancel any time.</p>
+  <div class="field"><label for="card-name">Name on card</label><input id="card-name" value="Demo Creator"></div>
+  <div class="field"><label for="billing">Billing</label><select id="billing"><option value="monthly">Monthly — $14.95</option><option value="annual">Annual — $119.40</option></select></div>
+  <div class="toolbar"><button class="btn rec" id="confirm-trial" type="button">Start free trial</button><button class="btn ghost" id="cancel-trial" type="button">Not now</button></div>
+</dialog>
+<dialog id="signin">
+  <h3>Sign in</h3>
+  <div class="field"><label for="email">Email</label><input id="email" type="email" value="demo.creator@mixdeck.app"></div>
+  <div class="toolbar"><button class="btn" id="confirm-signin" type="button">Sign in</button><button class="btn ghost" id="cancel-signin" type="button">Cancel</button></div>
+</dialog>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function(){
+const cfg = window.MIXDECK_CONFIG;
+const amp = window.amplitude;
+const live = !!(cfg.apiKey && amp && amp.track);
+function track(name, props){ try{ if(live) amp.track(name, props||{}); }catch(e){} }
+function toast(t){ const el=document.getElementById('toast'); el.textContent=t; el.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>el.classList.remove('show'),2200); }
+
+/* ---------- waveforms ---------- */
+function wave(id, seed){
+  const svg=document.getElementById(id); if(!svg) return; let d='', x=0, s=seed;
+  for(let i=0;i<75;i++){ s=(s*9301+49297)%233280; const h=4+ (s/233280)*28; d+=`<rect x="${x}" y="${(38-h)/2}" width="2.4" height="${h}" rx="1.2" fill="${i%9===0?'#F4A259':'#7FD1C2'}"/>`; x+=4; }
+  svg.innerHTML=d;
+}
+['w1','w2','w3','w4'].forEach((w,i)=>wave(w,(i+3)*97));
+
+/* ---------- trending ---------- */
+const songs=[["Night Bus Home","maya.k","Lo-fi"],["Monsoon Mixtape","arjun.beats","Hip hop"],["Glass Harbour","lumen","Synthwave"],["Tuesday Gospel","choir.collective","Soul"],["Kopi Run","sgp.loops","Afrobeats"]];
+document.getElementById('trending').innerHTML=songs.map((s,i)=>`<li><button class="play" type="button" aria-label="Play ${s[0]}" data-play="${i}"><svg viewBox="0 0 10 12"><path d="M0 0l10 6-10 6z" fill="currentColor"/></svg></button><div class="meta"><b>${s[0]}</b><small>by ${s[1]}</small></div><span class="genre">${s[2]}</span><button class="btn sm ghost" type="button" data-remix="${i}">Remix</button></li>`).join('');
+document.getElementById('trending').addEventListener('click',e=>{
+  const p=e.target.closest('[data-play]'), r=e.target.closest('[data-remix]');
+  if(p){ const s=songs[p.dataset.play]; track('Track Played',{track_name:s[0],genre:s[2],source:'trending'}); toast('Playing '+s[0]); }
+  if(r){ const s=songs[r.dataset.remix]; track('Remix Started',{track_name:s[0],genre:s[2]}); location.hash='#/studio'; }
+});
+
+/* ---------- router ---------- */
+const views=[...document.querySelectorAll('section.view')];
+function route(){
+  const name=(location.hash.replace('#/','')||'discover').split('?')[0];
+  const v=views.find(x=>x.dataset.view===name)||views[0];
+  views.forEach(x=>x.classList.toggle('on',x===v));
+  document.querySelectorAll('nav a').forEach(a=>{ if(a.dataset.route===v.dataset.view) a.setAttribute('aria-current','page'); else a.removeAttribute('aria-current'); });
+  window.scrollTo(0,0);
+  track('Screen Viewed',{screen:v.dataset.view});
+}
+window.addEventListener('hashchange',route); route();
+
+/* generic tracked links */
+document.addEventListener('click',e=>{ const t=e.target.closest('[data-track]'); if(t) track(t.dataset.track,{source:t.dataset.source||''}); });
+
+/* ---------- identity ---------- */
+function showWho(){ let id=null; try{ id=live?amp.getUserId():localStorage.getItem('mixdeck_uid'); }catch(e){}
+  document.getElementById('who').innerHTML = id ? `Signed in as <b>${id}</b>` : 'Browsing as guest'; }
+function signIn(email, plan, country, platform){
+  if(live){ amp.setUserId(email); const idf=new amp.Identify(); idf.set('plan',plan||'Free'); if(country) idf.set('country_label',country); idf.set('creator_type','Producer'); amp.identify(idf); }
+  try{ localStorage.setItem('mixdeck_uid',email);}catch(e){}
+  track('Signed In',{method:'email'}); showWho(); toast('Signed in as '+email);
+}
+const dlgSign=document.getElementById('signin');
+document.getElementById('hero-signin').onclick=()=>dlgSign.showModal();
+document.getElementById('cancel-signin').onclick=()=>dlgSign.close();
+document.getElementById('confirm-signin').onclick=()=>{ signIn(document.getElementById('email').value.trim()||'demo.creator@mixdeck.app'); dlgSign.close(); };
+showWho();
+
+/* ---------- studio ---------- */
+const board=document.getElementById('board');
+const instruments=['Keys','Guitar','Vocals','Synth','Strings'];
+let added=0;
+board.addEventListener('click',e=>{
+  const b=e.target.closest('[data-rec]'); if(!b) return;
+  const clip=b.parentElement.querySelector('.clip'); clip.classList.remove('empty');
+  b.textContent='Re-record'; b.classList.remove('rec'); b.classList.add('ghost');
+  track('Track Recorded',{instrument:b.dataset.rec,duration_sec:Math.round(20+Math.random()*90)}); toast(b.dataset.rec+' recorded');
+});
+document.getElementById('add-track-btn').onclick=()=>{
+  const inst=instruments[added%instruments.length]; added++;
+  const row=document.createElement('div'); row.className='row';
+  row.innerHTML=`<div class="inst">${inst}<small>New track</small></div><div class="clip empty"></div><button class="btn sm rec" data-rec="${inst}" type="button">Record</button>`;
+  board.insertBefore(row, board.querySelector('.toolbar'));
+  track('Track Added',{instrument:inst,track_count:board.querySelectorAll('.row').length});
+};
+document.getElementById('invite-btn').onclick=()=>{ track('Collaborator Invited',{channel:'link'}); toast('Invite link copied'); };
+document.getElementById('publish-btn').onclick=()=>{
+  const n=board.querySelectorAll('.row').length;
+  track('Song Published',{track_count:n,visibility:'public',genre:'Lo-fi'}); toast('Published — your song is live');
+};
+
+/* ---------- mastering ---------- */
+const presets=[['Warm','Rounded low end, softer highs'],['Punchy','Tight drums, loud and forward'],['Open','Wide stereo, airy top end']];
+const pc=document.getElementById('presets'); let chosen='Warm';
+pc.innerHTML=presets.map(p=>`<button class="plan" type="button" data-preset="${p[0]}" style="text-align:left;border:0;cursor:pointer"><h3>${p[0]}</h3><span style="color:var(--ink-2)">${p[1]}</span></button>`).join('');
+pc.addEventListener('click',e=>{ const b=e.target.closest('[data-preset]'); if(!b) return; chosen=b.dataset.preset;
+  pc.querySelectorAll('.plan').forEach(x=>x.classList.toggle('featured',x===b)); track('Mastering Preset Selected',{preset:chosen}); });
+pc.querySelector('.plan').classList.add('featured');
+document.getElementById('master-btn').onclick=()=>{ track('Mastering Started',{preset:chosen}); setTimeout(()=>{track('Mastering Completed',{preset:chosen}); toast('Mastered with '+chosen);},900); };
+// Export is gated: free users hit the paywall. Intentional friction for the replay / heatmap story.
+document.getElementById('export-btn').onclick=()=>{ track('Paywall Viewed',{trigger:'export_wav'}); location.hash='#/membership'; };
+
+/* ---------- membership ---------- */
+const dlg=document.getElementById('checkout');
+document.getElementById('trial-cta').onclick=()=>{ track('Checkout Started',{plan:'Membership'}); dlg.showModal(); };
+document.getElementById('cancel-trial').onclick=()=>{ track('Checkout Abandoned',{plan:'Membership'}); dlg.close(); };
+document.getElementById('confirm-trial').onclick=()=>{
+  const billing=document.getElementById('billing').value; const price=billing==='annual'?119.40:14.95;
+  track('Trial Started',{plan:'Membership',billing});
+  if(live){ const rev=new amp.Revenue().setProductId('membership_'+billing).setPrice(price).setQuantity(1).setRevenueType('subscription'); amp.revenue(rev);
+    const idf=new amp.Identify(); idf.set('plan','Membership'); amp.identify(idf); }
+  dlg.close(); toast('Trial started — welcome to Membership');
+};
+document.getElementById('free-cta').onclick=()=>track('Free Plan Kept',{});
+// Deliberately does nothing visible: produces rage clicks for Session Replay, heatmaps and Zoning.
+document.getElementById('promo-apply').onclick=()=>{ track('Promo Code Applied',{has_code:!!document.getElementById('promo-code').value}); };
+
+/* ---------- SongStarter AI ---------- */
+const msgs=document.getElementById('msgs');
+const ideas=['A lo-fi beat for late-night studying','An upbeat pop hook in G major','A sad piano intro for a ballad','A drill beat at 140 BPM'];
+document.getElementById('chips').innerHTML=ideas.map(i=>`<button class="chip" type="button">${i}</button>`).join('');
+document.getElementById('chips').addEventListener('click',e=>{ const c=e.target.closest('.chip'); if(c){ document.getElementById('prompt').value=c.textContent; ask(); } });
+const replies={
+  lofi:'Here’s a start: 75 BPM, Fm7 – B♭m7 – E♭maj7 – A♭maj7, dusty kick on 1 and 3, vinyl crackle on the keys bus.',
+  pop:'Try G – D/F♯ – Em – C at 112 BPM. Hook idea: a two-note rise on “tonight” landing on the D.',
+  piano:'Start in A minor at 68 BPM: Am – F – C – G with the melody sitting on the E above middle C.',
+  drill:'140 BPM, sliding 808 in F♯ minor, hi-hats in triplet rolls every second bar, sparse piano stabs.',
+  any:'Here’s a starting point: 96 BPM in C minor, Cm – A♭ – E♭ – B♭, with a syncopated bass line under a simple four-on-the-floor kick.'
+};
+let turn=0;
+function ask(){
+  const input=document.getElementById('prompt'); const q=input.value.trim(); if(!q) return; input.value='';
+  turn++; const sessionId='ss-'+Date.now();
+  msgs.insertAdjacentHTML('beforeend',`<div class="msg me">${q.replace(/</g,'&lt;')}</div>`);
+  track('AI Prompt Submitted',{prompt_length:q.length,turn,assistant:'SongStarter'});
+  const k=/lo-?fi/i.test(q)?'lofi':/pop/i.test(q)?'pop':/piano|ballad/i.test(q)?'piano':/drill/i.test(q)?'drill':'any';
+  const t0=performance.now();
+  setTimeout(()=>{
+    const id='r'+turn;
+    msgs.insertAdjacentHTML('beforeend',`<div class="msg bot" id="${id}">${replies[k]}<div class="rate"><button class="btn sm ghost" data-rate="up" type="button">Helpful</button><button class="btn sm ghost" data-rate="down" type="button">Not helpful</button><a class="btn sm" href="#/studio" data-track="AI Idea Opened In Studio" data-source="songstarter">Open in Studio</a></div></div>`);
+    msgs.scrollTop=msgs.scrollHeight;
+    track('AI Response Shown',{latency_ms:Math.round(performance.now()-t0),intent:k,turn,assistant:'SongStarter'});
+  },700);
+}
+document.getElementById('ask').addEventListener('submit',e=>{e.preventDefault();ask();});
+msgs.addEventListener('click',e=>{ const b=e.target.closest('[data-rate]'); if(!b) return;
+  track('AI Response Rated',{rating:b.dataset.rate,assistant:'SongStarter'}); b.parentElement.querySelectorAll('[data-rate]').forEach(x=>x.disabled=true); toast('Thanks for the feedback'); });
+msgs.insertAdjacentHTML('beforeend','<div class="msg bot">Tell me a mood, a genre or a song you love, and I’ll write a starting point.</div>');
+
+/* ---------- control room ---------- */
+const stMain=document.getElementById('st-main'), stSat=document.getElementById('st-sat');
+function mark(el,on,txt){ el.textContent=txt; el.className='status '+(on?'ok':'off'); }
+mark(stMain,live,live?'connected':(cfg.apiKey?'key set, SDK not loaded':'not set'));
+mark(stSat,!!cfg.satelliteKey,cfg.satelliteKey?'key set':'not set');
+document.getElementById('k-main').value=cfg.apiKey||''; document.getElementById('k-sat').value=cfg.satelliteKey||'';
+document.getElementById('save-keys').onclick=()=>{ try{ localStorage.setItem('mixdeck_key',document.getElementById('k-main').value.trim()); localStorage.setItem('mixdeck_sat',document.getElementById('k-sat').value.trim()); }catch(e){} location.reload(); };
+document.getElementById('signin-persona').onclick=()=>{ const [e,p,c,pl]=document.getElementById('persona').value.split('|'); signIn(e,p,c,pl); };
+document.getElementById('reset-id').onclick=()=>{ if(live) amp.reset(); try{localStorage.removeItem('mixdeck_uid');}catch(e){} showWho(); toast('Signed out — new anonymous device'); };
+
+const logEl=document.getElementById('log'); function log(t){ logEl.textContent+=t+'\n'; logEl.scrollTop=logEl.scrollHeight; }
+function rnd(a,b){ return a+Math.random()*(b-a); } function pick(a){ return a[Math.floor(Math.random()*a.length)]; }
+function uuid(){ return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c==='x'?r:(r&3|8)).toString(16);}); }
+
+/* Synthetic creators with realistic behaviour:
+   - engaged creators record, publish and master more, and convert to Membership more often
+   - some hit the export paywall and churn; some use SongStarter */
+function makeUser(i, prefix){
+  const country=pick(['Singapore','India','Australia','Indonesia','Philippines','Japan','United States']);
+  const platform=pick(['iOS','iOS','Android','Android','Web']);
+  const engaged=Math.random(); // 0..1
+  return {user_id:`${prefix}-creator-${String(i).padStart(4,'0')}@mixdeck.app`, device_id:uuid(), country, platform, engaged,
+    genre:pick(['Lo-fi','Hip hop','Pop','Afrobeats','Synthwave','Soul','Drill'])};
+}
+function sessionEvents(u, start, product){
+  const ev=[]; let t=start; const sid=start;
+  const push=(type,props)=>{ t+=rnd(8,90)*1000; ev.push({user_id:u.user_id,device_id:u.device_id,session_id:sid,time:Math.round(t),event_type:type,
+    event_properties:props||{},platform:u.platform,country:u.country,insert_id:uuid(),
+    user_properties:{plan:u.plan||'Free',creator_type:u.engaged>.6?'Producer':'Hobbyist',favourite_genre:u.genre,product:product}}); };
+  push('Screen Viewed',{screen:'discover'});
+  const plays=Math.floor(rnd(1,5)); for(let k=0;k<plays;k++) push('Track Played',{source:'trending',genre:pick(['Lo-fi','Hip hop','Pop','Soul'])});
+  if(Math.random()<.35+u.engaged*.5){
+    push('Screen Viewed',{screen:'studio'}); push('Create Project Clicked',{source:'hero'});
+    const tracks=Math.floor(rnd(1,3+u.engaged*4));
+    for(let k=0;k<tracks;k++){ const inst=pick(['Drums','Bass','Keys','Vocals','Guitar']); push('Track Added',{instrument:inst}); push('Track Recorded',{instrument:inst,duration_sec:Math.round(rnd(15,120))}); }
+    if(Math.random()<.2+u.engaged*.3){ push('Screen Viewed',{screen:'songstarter'}); push('AI Prompt Submitted',{assistant:'SongStarter',turn:1,prompt_length:Math.round(rnd(12,80))});
+      push('AI Response Shown',{assistant:'SongStarter',latency_ms:Math.round(rnd(400,2600))}); if(Math.random()<.6) push('AI Response Rated',{assistant:'SongStarter',rating:Math.random()<.72?'up':'down'}); }
+    if(Math.random()<.15+u.engaged*.25) push('Collaborator Invited',{channel:'link'});
+    if(Math.random()<.2+u.engaged*.45){ push('Song Published',{track_count:tracks+1,visibility:'public',genre:u.genre});
+      if(Math.random()<.5){ push('Screen Viewed',{screen:'mastering'}); const pr=pick(['Warm','Punchy','Open']); push('Mastering Started',{preset:pr}); push('Mastering Completed',{preset:pr});
+        if(u.plan!=='Membership' && Math.random()<.55){ push('Paywall Viewed',{trigger:'export_wav'}); push('Screen Viewed',{screen:'membership'});
+          if(Math.random()<.25+u.engaged*.35){ push('Checkout Started',{plan:'Membership'});
+            if(Math.random()<.62){ const billing=Math.random()<.7?'monthly':'annual'; push('Trial Started',{plan:'Membership',billing}); u.plan='Membership';
+              const last=ev[ev.length-1]; last.revenue = billing==='annual'?119.40:14.95; last.price=last.revenue; last.quantity=1; last.productId='membership_'+billing; last.revenueType='subscription'; }
+            else push('Checkout Abandoned',{plan:'Membership'}); } } } } }
+  return ev;
+}
+async function send(key, events){
+  const host = cfg.serverZone==='EU' ? 'https://api.eu.amplitude.com/2/httpapi' : 'https://api2.amplitude.com/2/httpapi';
+  const res=await fetch(host,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({api_key:key,events})});
+  if(!res.ok){ const t=await res.text(); throw new Error(res.status+' '+t.slice(0,160)); }
+}
+document.getElementById('seed-btn').onclick=async()=>{
+  const keys=[]; if(cfg.apiKey) keys.push(['main',cfg.apiKey,'Mixdeck Web']);
+  if(document.getElementById('seed-target').value==='both'){ if(cfg.satelliteKey) keys.push(['sat',cfg.satelliteKey,'Mixdeck Studio Pro']); else log('No satellite key set — seeding main only.'); }
+  if(!keys.length){ log('Add the main project API key first.'); return; }
+  const n=Math.max(50,Math.min(3000,+document.getElementById('n-users').value||600));
+  const btn=document.getElementById('seed-btn'); btn.disabled=true; const prog=document.getElementById('seed-prog');
+  const now=Date.now(), day=86400000; let total=0;
+  try{
+    for(const [tag,key,product] of keys){
+      log(`Seeding ${n} creators into ${product}…`);
+      let buf=[];
+      for(let i=0;i<n;i++){
+        // satellite users overlap with ~35% of main users so Portfolio shows cross-product creators
+        const u = makeUser(tag==='sat' && Math.random()<.35 ? i : i+(tag==='sat'?100000:0), 'mx');
+        const firstDay=Math.floor(rnd(1,30)); const sessions=Math.max(1,Math.round(rnd(1,3)+u.engaged*10));
+        for(let s=0;s<sessions;s++){ const d=firstDay - Math.floor(s*(firstDay/sessions)); if(d<0) break;
+          buf=buf.concat(sessionEvents(u, now - d*day - rnd(0,20)*3600000, product)); }
+        if(buf.length>=900){ await send(key,buf); total+=buf.length; buf=[]; await new Promise(r=>setTimeout(r,250)); }
+        prog.value=Math.round(((i+1)/n)*100);
+      }
+      if(buf.length){ await send(key,buf); total+=buf.length; }
+      log(`Done: ${product}`);
+    }
+    log(`Sent ${total.toLocaleString()} events. Allow a few minutes for them to appear.`);
+  }catch(e){ log('Stopped: '+e.message+'\nCheck the API key and server zone, then try again.'); }
+  btn.disabled=false;
+};
+})();
+</script>
+</body>
+</html>
