@@ -508,7 +508,7 @@ function makeUser(i, prefix){
     genre:pick(['Lo-fi','Hip hop','Pop','Afrobeats','Synthwave','Soul','Drill'])};
 }
 function sessionEvents(u, start, product){
-  const ev=[]; let t=start; const sid=start;
+  start=Math.round(start); const ev=[]; let t=start; const sid=start;
   const push=(type,props)=>{ t+=rnd(8,90)*1000; ev.push({user_id:u.user_id,device_id:u.device_id,session_id:sid,time:Math.round(t),event_type:type,
     event_properties:props||{},platform:u.platform,country:u.country,insert_id:uuid(),
     user_properties:{plan:u.plan||'Free',creator_type:u.engaged>.6?'Producer':'Hobbyist',favourite_genre:u.genre,product:product}}); };
