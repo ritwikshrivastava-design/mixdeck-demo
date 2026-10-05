@@ -27,8 +27,9 @@ window.MIXDECK_CONFIG = {
   } catch(e){}
   var key = window.MIXDECK_CONFIG.apiKey;
   if (!key) return;
-  // Unified Script: Analytics + Session Replay + Web Experiment + Guides & Surveys (G&S is booted by the script itself).
+  // Unified Script (Analytics + Session Replay + Web Experiment), then the Guides & Surveys script. Both load synchronously, in order.
   document.write('<script src="https://cdn.amplitude.com/script/' + key + '.js"><\/script>');
+  document.write('<script src="https://cdn.amplitude.com/script/' + key + '.engagement.js"><\/script>');
 })();
 </script>
 <script>
@@ -47,6 +48,11 @@ window.MIXDECK_CONFIG = {
       }
     });
   } catch (e) { console.warn('Amplitude init failed', e); }
+  // Guides & Surveys: register as a plugin AFTER init (no engagement.init/boot when using the plugin).
+  try {
+    if (window.engagement && window.engagement.plugin) window.amplitude.add(window.engagement.plugin());
+    else console.warn('Guides & Surveys script not loaded');
+  } catch (e) { console.warn('Guides & Surveys plugin failed', e); }
 })();
 </script>
 <style>
