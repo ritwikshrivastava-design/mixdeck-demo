@@ -68,6 +68,7 @@ window.MIXDECK_CONFIG = {
 }
 :root[data-theme="dark"]{ --console:#10172A; --panel:#18213A; --ink:#EEF1F7; --ink-2:#A8B3C7; --rule:#2C3756; }
 *{box-sizing:border-box}
+[hidden]{display:none !important}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 body{margin:0;background:var(--console);color:var(--ink);font:400 16px/1.55 var(--body);
   padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -84,7 +85,8 @@ header.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;backgroun
 nav{display:flex;gap:4px;flex-wrap:wrap}
 nav a{text-decoration:none;padding:8px 12px;border-radius:var(--radius-s);color:var(--ink-2);font-weight:500}
 nav a[aria-current="page"]{color:var(--ink);background:var(--panel)}
-.bar .who{margin-left:auto;font-size:14px;color:var(--ink-2)}
+.bar .auth{margin-left:auto;display:flex;align-items:center;gap:12px;flex-shrink:0}
+.bar .who{font-size:14px;color:var(--ink-2);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bar .who b{color:var(--ink)}
 
 main section.view{display:none;padding:48px 0 80px}
@@ -134,6 +136,7 @@ p.lede{font-size:19px;color:var(--ink-2);max-width:56ch}
 .field{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
 .field label{font-size:14px;font-weight:600}
 .field input,.field select,.field textarea{background:var(--console);border:1px solid var(--rule);border-radius:var(--radius-s);padding:10px 12px}
+.field .err{font-size:13px;color:var(--rec);min-height:1.2em}
 
 /* membership */
 .plans{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:36px}
@@ -175,6 +178,7 @@ footer{border-top:1px solid var(--rule);padding:24px 0;color:var(--ink-2);font-s
   .hero,.studio,.plans,.control{grid-template-columns:1fr}
   .board .row{grid-template-columns:100px 1fr 110px}
   .bar .who{display:none}
+  .bar .wrap{gap:12px}
   nav{overflow-x:auto;flex-wrap:nowrap}
 }
 </style>
@@ -190,7 +194,10 @@ footer{border-top:1px solid var(--rule);padding:24px 0;color:var(--ink-2);font-s
       <a href="#/songstarter" data-route="songstarter">SongStarter AI</a>
       <a href="#/membership" data-route="membership">Membership</a>
     </nav>
-    <div class="who" id="who">Browsing as guest</div>
+    <div class="auth">
+      <div class="who" id="who">Browsing as guest</div>
+      <button class="btn sm ghost" id="auth-btn" type="button">Sign in</button>
+    </div>
   </div>
 </header>
 
@@ -349,7 +356,12 @@ footer{border-top:1px solid var(--rule);padding:24px 0;color:var(--ink-2);font-s
 </dialog>
 <dialog id="signin">
   <h3>Sign in</h3>
-  <div class="field"><label for="email">Email</label><input id="email" type="email" value="demo.creator@mixdeck.app"></div>
+  <p style="color:var(--ink-2);margin:.4em 0 1em">Use any email. Each new email becomes a new user in Amplitude.</p>
+  <div class="field">
+    <label for="email">Email</label>
+    <input id="email" type="email" autocomplete="off" placeholder="you@example.com">
+    <span class="err" id="email-err" aria-live="polite"></span>
+  </div>
   <div class="toolbar"><button class="btn" id="confirm-signin" type="button">Sign in</button><button class="btn ghost" id="cancel-signin" type="button">Cancel</button></div>
 </dialog>
 <div class="toast" id="toast" role="status"></div>
@@ -359,8 +371,9 @@ footer{border-top:1px solid var(--rule);padding:24px 0;color:var(--ink-2);font-s
 const cfg = window.MIXDECK_CONFIG;
 const amp = window.amplitude;
 const live = !!(cfg.apiKey && amp && amp.track);
-function track(name, props){ try{ if(live) amp.track(name, props||{}); }catch(e){} }
+function track(name, props){ try{ if(live) return amp.track(name, props||{}); }catch(e){} }
 function toast(t){ const el=document.getElementById('toast'); el.textContent=t; el.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>el.classList.remove('show'),2200); }
+function esc(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 /* ---------- waveforms ---------- */
 function wave(id, seed){
@@ -394,18 +407,60 @@ window.addEventListener('hashchange',route); route();
 /* generic tracked links */
 document.addEventListener('click',e=>{ const t=e.target.closest('[data-track]'); if(t) track(t.dataset.track,{source:t.dataset.source||''}); });
 
-/* ---------- identity ---------- */
-function showWho(){ let id=null; try{ id=live?amp.getUserId():localStorage.getItem('mixdeck_uid'); }catch(e){}
-  document.getElementById('who').innerHTML = id ? `Signed in as <b>${id}</b>` : 'Browsing as guest'; }
-function signIn(email, plan, country, platform){
-  if(live){ amp.setUserId(email); const idf=new amp.Identify(); idf.set('plan',plan||'Free'); if(country) idf.set('country_label',country); idf.set('creator_type','Producer'); amp.identify(idf); }
-  try{ localStorage.setItem('mixdeck_uid',email);}catch(e){}
-  track('Signed In',{method:'email'}); showWho(); toast('Signed in as '+email);
+/* ---------- identity ----------
+   Sign in:  setUserId(email) FIRST, then Identify with the email user property, then a real event, then flush.
+   Sign out: track + flush the last events, THEN reset() (clears User ID, new anonymous Device ID).
+   Switching users signs the previous user out first so nothing leaks between them. */
+const whoEl=document.getElementById('who');
+const authBtn=document.getElementById('auth-btn');
+const heroSignin=document.getElementById('hero-signin');
+function currentUser(){ try{ return (live?amp.getUserId():localStorage.getItem('mixdeck_uid')) || null; }catch(e){ return null; } }
+async function flushNow(){ try{ if(live && amp.flush){ const r=amp.flush(); if(r && r.promise) await r.promise; } }catch(e){} }
+function showWho(){
+  const id=currentUser();
+  whoEl.innerHTML = id ? `Signed in as <b>${esc(id)}</b>` : 'Browsing as guest';
+  authBtn.textContent = id ? 'Sign out' : 'Sign in';
+  heroSignin.hidden = !!id;
+}
+async function signOut(silent){
+  if(currentUser()) track('Signed Out',{});
+  await flushNow();
+  if(live){ try{ amp.reset(); }catch(e){} }
+  try{ localStorage.removeItem('mixdeck_uid'); }catch(e){}
+  console.info('[Mixdeck] signed out — User ID cleared, new Device ID:', live && amp.getDeviceId ? amp.getDeviceId() : '(no SDK)');
+  if(!silent){ showWho(); toast('Signed out — browsing as guest'); }
+}
+async function signIn(email, plan, country){
+  const prev=currentUser();
+  if(prev && prev!==email) await signOut(true);
+  if(live){
+    amp.setUserId(email);
+    const idf=new amp.Identify();
+    idf.set('email', email);
+    idf.set('plan', plan||'Free');
+    if(country) idf.set('country_label', country);
+    idf.set('creator_type','Producer');
+    amp.identify(idf);
+  }
+  try{ localStorage.setItem('mixdeck_uid',email); }catch(e){}
+  track('Signed In',{method:'email'});
+  await flushNow();
+  console.info('[Mixdeck] signed in', { user_id: live?amp.getUserId():email, email, plan: plan||'Free' });
+  showWho(); toast('Signed in as '+email);
 }
 const dlgSign=document.getElementById('signin');
-document.getElementById('hero-signin').onclick=()=>dlgSign.showModal();
+const emailIn=document.getElementById('email'), emailErr=document.getElementById('email-err');
+function openSignIn(){ emailIn.value=''; emailErr.textContent=''; dlgSign.showModal(); emailIn.focus(); }
+function submitSignIn(){
+  const v=emailIn.value.trim();
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)){ emailErr.textContent='Enter an email like you@example.com'; emailIn.focus(); return; }
+  dlgSign.close(); signIn(v);
+}
+heroSignin.onclick=openSignIn;
+authBtn.onclick=()=>{ if(currentUser()) signOut(); else openSignIn(); };
 document.getElementById('cancel-signin').onclick=()=>dlgSign.close();
-document.getElementById('confirm-signin').onclick=()=>{ signIn(document.getElementById('email').value.trim()||'demo.creator@mixdeck.app'); dlgSign.close(); };
+document.getElementById('confirm-signin').onclick=submitSignIn;
+emailIn.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); submitSignIn(); } });
 showWho();
 
 /* ---------- studio ---------- */
@@ -496,8 +551,8 @@ mark(stMain,live,live?'connected':(cfg.apiKey?'key set, SDK not loaded':'not set
 mark(stSat,!!cfg.satelliteKey,cfg.satelliteKey?'key set':'not set');
 document.getElementById('k-main').value=cfg.apiKey||''; document.getElementById('k-sat').value=cfg.satelliteKey||'';
 document.getElementById('save-keys').onclick=()=>{ try{ localStorage.setItem('mixdeck_key',document.getElementById('k-main').value.trim()); localStorage.setItem('mixdeck_sat',document.getElementById('k-sat').value.trim()); }catch(e){} location.reload(); };
-document.getElementById('signin-persona').onclick=()=>{ const [e,p,c,pl]=document.getElementById('persona').value.split('|'); signIn(e,p,c,pl); };
-document.getElementById('reset-id').onclick=()=>{ if(live) amp.reset(); try{localStorage.removeItem('mixdeck_uid');}catch(e){} showWho(); toast('Signed out — new anonymous device'); };
+document.getElementById('signin-persona').onclick=()=>{ const [e,p,c]=document.getElementById('persona').value.split('|'); signIn(e,p,c); };
+document.getElementById('reset-id').onclick=()=>signOut();
 
 const logEl=document.getElementById('log'); function log(t){ logEl.textContent+=t+'\n'; logEl.scrollTop=logEl.scrollHeight; }
 function rnd(a,b){ return a+Math.random()*(b-a); } function pick(a){ return a[Math.floor(Math.random()*a.length)]; }
@@ -517,7 +572,7 @@ function sessionEvents(u, start, product){
   start=Math.round(start); const ev=[]; let t=start; const sid=start;
   const push=(type,props)=>{ t+=rnd(8,90)*1000; ev.push({user_id:u.user_id,device_id:u.device_id,session_id:sid,time:Math.round(t),event_type:type,
     event_properties:props||{},platform:u.platform,country:u.country,insert_id:uuid(),
-    user_properties:{plan:u.plan||'Free',creator_type:u.engaged>.6?'Producer':'Hobbyist',favourite_genre:u.genre,product:product}}); };
+    user_properties:{email:u.user_id,plan:u.plan||'Free',creator_type:u.engaged>.6?'Producer':'Hobbyist',favourite_genre:u.genre,product:product}}); };
   push('Screen Viewed',{screen:'discover'});
   const plays=Math.floor(rnd(1,5)); for(let k=0;k<plays;k++) push('Track Played',{source:'trending',genre:pick(['Lo-fi','Hip hop','Pop','Soul'])});
   if(Math.random()<.35+u.engaged*.5){
