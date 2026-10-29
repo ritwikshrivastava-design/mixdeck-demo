@@ -137,6 +137,10 @@ p.lede{font-size:19px;color:var(--ink-2);max-width:56ch}
 .field label{font-size:14px;font-weight:600}
 .field input,.field select,.field textarea{background:var(--console);border:1px solid var(--rule);border-radius:var(--radius-s);padding:10px 12px}
 .field .err{font-size:13px;color:var(--rec);min-height:1.2em}
+.project{display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px;margin-top:28px}
+.project .field{margin:0;min-width:200px}
+.project .note{font-size:14px;color:var(--ink-2);margin:0 0 10px}
+.check{display:flex;gap:10px;align-items:center;font-size:15px}
 
 /* membership */
 .plans{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:36px}
@@ -233,12 +237,27 @@ footer{border-top:1px solid var(--rule);padding:24px 0;color:var(--ink-2);font-s
 <section class="view" data-view="studio" aria-labelledby="h-studio">
   <h2 id="h-studio">Untitled song</h2>
   <p class="lede">Add a track, hit record, and invite a friend to play the next part.</p>
+  <!-- UC-01 step 2: Project Created fires after the save succeeds -->
+  <div class="card project" id="project-card">
+    <div class="field">
+      <label for="template">Start from</label>
+      <select id="template">
+        <option value="blank">Blank project</option>
+        <option value="beat">Beat</option>
+        <option value="podcast">Podcast</option>
+      </select>
+    </div>
+    <button class="btn sm rec" id="create-project-btn" type="button">Create project</button>
+    <p class="note" id="project-note">Create a project to add, upload and publish tracks.</p>
+  </div>
   <div class="studio">
     <div class="board" id="board">
       <div class="row"><div class="inst">Drums<small>Drum machine</small></div><div class="clip"></div><button class="btn sm ghost" data-rec="Drums" type="button">Re-record</button></div>
       <div class="row"><div class="inst">Bass<small>Electric bass</small></div><div class="clip empty"></div><button class="btn sm rec" data-rec="Bass" type="button">Record</button></div>
       <div class="toolbar">
         <button class="btn sm ghost" id="add-track-btn" type="button">Add track</button>
+        <label class="btn sm ghost" id="upload-label" for="upload-input">Upload audio</label>
+        <input type="file" id="upload-input" accept="audio/*" hidden>
         <button class="btn sm ghost" id="invite-btn" type="button">Invite collaborator</button>
         <button class="btn sm" id="publish-btn" type="button">Publish song</button>
       </div>
@@ -329,6 +348,10 @@ footer{border-top:1px solid var(--rule);padding:24px 0;color:var(--ink-2);font-s
           <option value="demo.newbie@mixdeck.app|Free|Australia|Web">First-week creator, Australia</option>
         </select></div>
       <div class="toolbar"><button class="btn sm" id="signin-persona" type="button">Sign in</button><button class="btn sm ghost" id="reset-id" type="button">Sign out and reset</button></div>
+      <hr style="border:0;border-top:1px solid var(--rule);margin:20px 0">
+      <h3>Demo switches</h3>
+      <label class="check" style="margin-top:12px"><input type="checkbox" id="force-fail"> Make the next publish fail</label>
+      <p style="color:var(--ink-2);font-size:14px;margin:.6em 0 0">Shows why Song Published fires on success: the failed attempt sends Song Publish Failed instead.</p>
     </div>
     <div class="card">
       <h3>Seed history</h3>
@@ -364,6 +387,16 @@ footer{border-top:1px solid var(--rule);padding:24px 0;color:var(--ink-2);font-s
   </div>
   <div class="toolbar"><button class="btn" id="confirm-signin" type="button">Sign in</button><button class="btn ghost" id="cancel-signin" type="button">Cancel</button></div>
 </dialog>
+<!-- UC-01 step 4: Song Published fires only when the publish succeeds -->
+<dialog id="publish-dlg">
+  <h3>Publish your song</h3>
+  <p style="color:var(--ink-2);margin:.4em 0 1em">Choose a genre and who can listen.</p>
+  <div class="field"><label for="pub-genre">Genre</label>
+    <select id="pub-genre"><option>Lo-fi</option><option>Hip hop</option><option>Pop</option><option>Afrobeats</option><option>Synthwave</option><option>Soul</option><option>Drill</option></select></div>
+  <div class="field"><label for="pub-visibility">Who can listen</label>
+    <select id="pub-visibility"><option value="public">Everyone</option><option value="unlisted">Anyone with the link</option><option value="private">Only me</option></select></div>
+  <div class="toolbar"><button class="btn" id="confirm-publish" type="button">Publish</button><button class="btn ghost" id="cancel-publish" type="button">Cancel</button></div>
+</dialog>
 <div class="toast" id="toast" role="status"></div>
 
 <script>
@@ -373,6 +406,9 @@ const amp = window.amplitude;
 const live = !!(cfg.apiKey && amp && amp.track);
 function track(name, props){ try{ if(live) return amp.track(name, props||{}); }catch(e){} }
 function toast(t){ const el=document.getElementById('toast'); el.textContent=t; el.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>el.classList.remove('show'),2200); }
+/* UC-01: where did a Studio visit come from? Set on the click, read when the Studio screen loads. */
+let pendingSource='direct';
+document.addEventListener('click',e=>{ const a=e.target.closest('a[href="#/studio"]'); if(a) pendingSource=a.dataset.source||(a.closest('nav')?'nav':'link'); },true);
 function esc(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 /* ---------- waveforms ---------- */
@@ -389,7 +425,7 @@ document.getElementById('trending').innerHTML=songs.map((s,i)=>`<li><button clas
 document.getElementById('trending').addEventListener('click',e=>{
   const p=e.target.closest('[data-play]'), r=e.target.closest('[data-remix]');
   if(p){ const s=songs[p.dataset.play]; track('Track Played',{track_name:s[0],genre:s[2],source:'trending'}); toast('Playing '+s[0]); }
-  if(r){ const s=songs[r.dataset.remix]; track('Remix Started',{track_name:s[0],genre:s[2]}); location.hash='#/studio'; }
+  if(r){ const s=songs[r.dataset.remix]; track('Remix Started',{track_name:s[0],genre:s[2]}); pendingSource='remix'; location.hash='#/studio'; }
 });
 
 /* ---------- router ---------- */
@@ -400,7 +436,10 @@ function route(){
   views.forEach(x=>x.classList.toggle('on',x===v));
   document.querySelectorAll('nav a').forEach(a=>{ if(a.dataset.route===v.dataset.view) a.setAttribute('aria-current','page'); else a.removeAttribute('aria-current'); });
   window.scrollTo(0,0);
-  track('Screen Viewed',{screen:v.dataset.view});
+  const props={screen:v.dataset.view};
+  if(v.dataset.view==='studio') props.entry_source=pendingSource; // UC-01 funnel step 1: Screen Viewed where screen = studio
+  pendingSource='direct';
+  track('Screen Viewed',props);
 }
 window.addEventListener('hashchange',route); route();
 
@@ -463,8 +502,37 @@ document.getElementById('confirm-signin').onclick=submitSignIn;
 emailIn.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); submitSignIn(); } });
 showWho();
 
-/* ---------- studio ---------- */
+/* ---------- studio ----------
+   UC-01 funnel: Screen Viewed (screen = studio) -> Project Created -> Track Uploaded or Track Recorded -> Song Published
+   Outcome events fire after the action succeeds, never on the button click. Clicks are already in autocapture. */
 const board=document.getElementById('board');
+let project=null;
+function needProject(){ if(project) return false; toast('Create a project first'); document.getElementById('template').focus(); return true; }
+document.getElementById('create-project-btn').onclick=()=>{
+  const btn=document.getElementById('create-project-btn'); const template=document.getElementById('template').value;
+  btn.disabled=true; btn.textContent='Saving…';
+  setTimeout(()=>{ // stands in for the save API: in a real app this runs in the success callback
+    project={template};
+    track('Project Created',{template});
+    btn.textContent='Project saved';
+    document.getElementById('template').disabled=true;
+    document.getElementById('project-note').textContent='Saved. Record or upload a track, then publish.';
+    toast('Project saved');
+  },600);
+};
+document.getElementById('upload-label').addEventListener('click',e=>{ if(needProject()) e.preventDefault(); });
+document.getElementById('upload-input').addEventListener('change',e=>{
+  const f=e.target.files[0]; e.target.value=''; if(!f || needProject()) return;
+  const t0=performance.now(); toast('Uploading…');
+  setTimeout(()=>{ // stands in for the upload API success
+    // The file name is NOT sent: free text, a new value for every file, and it can hold personal info.
+    track('Track Uploaded',{file_type:f.type||'unknown',file_size_mb:+(f.size/1e6).toFixed(1),upload_duration_sec:+((performance.now()-t0)/1000).toFixed(1)});
+    const row=document.createElement('div'); row.className='row';
+    row.innerHTML=`<div class="inst">Uploaded audio<small>${esc(f.type||'audio')}</small></div><div class="clip"></div><span class="genre">Uploaded</span>`;
+    board.insertBefore(row, board.querySelector('.toolbar'));
+    toast('Upload complete');
+  },800+Math.random()*1200);
+});
 const instruments=['Keys','Guitar','Vocals','Synth','Strings'];
 let added=0;
 board.addEventListener('click',e=>{
@@ -481,9 +549,22 @@ document.getElementById('add-track-btn').onclick=()=>{
   track('Track Added',{instrument:inst,track_count:board.querySelectorAll('.row').length});
 };
 document.getElementById('invite-btn').onclick=()=>{ track('Collaborator Invited',{channel:'link'}); toast('Invite link copied'); };
-document.getElementById('publish-btn').onclick=()=>{
+const dlgPub=document.getElementById('publish-dlg');
+document.getElementById('publish-btn').onclick=()=>{ if(!needProject()) dlgPub.showModal(); };
+document.getElementById('cancel-publish').onclick=()=>dlgPub.close();
+document.getElementById('confirm-publish').onclick=()=>{
+  const btn=document.getElementById('confirm-publish');
+  const genre=document.getElementById('pub-genre').value, visibility=document.getElementById('pub-visibility').value;
   const n=board.querySelectorAll('.row').length;
-  track('Song Published',{track_count:n,visibility:'public',genre:'Lo-fi'}); toast('Published — your song is live');
+  const failSwitch=document.getElementById('force-fail'); const fail=failSwitch.checked;
+  btn.disabled=true; btn.textContent='Publishing…';
+  setTimeout(()=>{ // stands in for the publish API response
+    btn.disabled=false; btn.textContent='Publish'; dlgPub.close();
+    if(fail){ failSwitch.checked=false; track('Song Publish Failed',{reason:'network_timeout'}); toast('Publish failed. Check your connection and try again.'); return; }
+    track('Song Published',{track_count:n,visibility,genre});
+    if(live){ try{ const idf=new amp.Identify(); idf.add('songs_published',1); idf.setOnce('first_publish_date',new Date().toISOString().slice(0,10)); amp.identify(idf); }catch(e){} }
+    toast('Published — your song is live');
+  },900);
 };
 
 /* ---------- mastering ---------- */
@@ -572,17 +653,22 @@ function sessionEvents(u, start, product){
   start=Math.round(start); const ev=[]; let t=start; const sid=start;
   const push=(type,props)=>{ t+=rnd(8,90)*1000; ev.push({user_id:u.user_id,device_id:u.device_id,session_id:sid,time:Math.round(t),event_type:type,
     event_properties:props||{},platform:u.platform,country:u.country,insert_id:uuid(),
-    user_properties:{email:u.user_id,plan:u.plan||'Free',creator_type:u.engaged>.6?'Producer':'Hobbyist',favourite_genre:u.genre,product:product}}); };
+    user_properties:{email:u.user_id,plan:u.plan||'Free',creator_type:u.engaged>.6?'Producer':'Hobbyist',favourite_genre:u.genre,product:product,songs_published:u.songs||0}}); };
   push('Screen Viewed',{screen:'discover'});
   const plays=Math.floor(rnd(1,5)); for(let k=0;k<plays;k++) push('Track Played',{source:'trending',genre:pick(['Lo-fi','Hip hop','Pop','Soul'])});
   if(Math.random()<.35+u.engaged*.5){
-    push('Screen Viewed',{screen:'studio'}); push('Create Project Clicked',{source:'hero'});
-    const tracks=Math.floor(rnd(1,3+u.engaged*4));
+    const src=pick(['hero','hero','nav','remix','songstarter']);
+    push('Screen Viewed',{screen:'studio',entry_source:src}); if(src==='hero') push('Create Project Clicked',{source:'hero'});
+    const made=Math.random()<.6+u.engaged*.35;
+    if(made) push('Project Created',{template:pick(['blank','beat','beat','podcast'])});
+    const tracks=made?Math.floor(rnd(1,3+u.engaged*4)):0;
     for(let k=0;k<tracks;k++){ const inst=pick(['Drums','Bass','Keys','Vocals','Guitar']); push('Track Added',{instrument:inst}); push('Track Recorded',{instrument:inst,duration_sec:Math.round(rnd(15,120))}); }
     if(Math.random()<.2+u.engaged*.3){ push('Screen Viewed',{screen:'songstarter'}); push('AI Prompt Submitted',{assistant:'SongStarter',turn:1,prompt_length:Math.round(rnd(12,80))});
       push('AI Response Shown',{assistant:'SongStarter',latency_ms:Math.round(rnd(400,2600))}); if(Math.random()<.6) push('AI Response Rated',{assistant:'SongStarter',rating:Math.random()<.72?'up':'down'}); }
+    if(made && Math.random()<.25+u.engaged*.3) push('Track Uploaded',{file_type:pick(['audio/wav','audio/mpeg','audio/x-m4a']),file_size_mb:+rnd(2,60).toFixed(1),upload_duration_sec:+rnd(1,20).toFixed(1)});
     if(Math.random()<.15+u.engaged*.25) push('Collaborator Invited',{channel:'link'});
-    if(Math.random()<.2+u.engaged*.45){ push('Song Published',{track_count:tracks+1,visibility:'public',genre:u.genre});
+    if(made && Math.random()<.04) push('Song Publish Failed',{reason:'network_timeout'});
+    if(made && Math.random()<.2+u.engaged*.45){ u.songs=(u.songs||0)+1; push('Song Published',{track_count:tracks+1,visibility:pick(['public','public','public','unlisted','private']),genre:u.genre});
       if(Math.random()<.5){ push('Screen Viewed',{screen:'mastering'}); const pr=pick(['Warm','Punchy','Open']); push('Mastering Started',{preset:pr}); push('Mastering Completed',{preset:pr});
         if(u.plan!=='Membership' && Math.random()<.55){ push('Paywall Viewed',{trigger:'export_wav'}); push('Screen Viewed',{screen:'membership'});
           if(Math.random()<.25+u.engaged*.35){ push('Checkout Started',{plan:'Membership'});
