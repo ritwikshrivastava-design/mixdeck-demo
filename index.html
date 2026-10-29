@@ -121,6 +121,10 @@ p.lede{font-size:19px;color:var(--ink-2);max-width:56ch}
 .play svg{width:14px;height:14px}
 .meta small{display:block;color:var(--ink-2);font-size:13px}
 .genre{font-size:13px;color:var(--ink-2)}
+.playlists{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:20px}
+.playlist-card{text-align:left;border:0;background:var(--panel);border-radius:var(--radius-l);padding:14px;cursor:pointer;display:flex;flex-direction:column;gap:2px}
+.playlist-card .art{aspect-ratio:1;border-radius:12px;background:linear-gradient(135deg,var(--a),var(--b));margin-bottom:10px}
+.playlist-card small{color:var(--ink-2);font-size:13px}
 
 /* studio */
 .studio{display:grid;grid-template-columns:1fr 320px;gap:24px;margin-top:28px}
@@ -180,6 +184,7 @@ footer{border-top:1px solid var(--rule);padding:24px 0;color:var(--ink-2);font-s
 
 @media (max-width:860px){
   .hero,.studio,.plans,.control{grid-template-columns:1fr}
+  .playlists{grid-template-columns:repeat(2,1fr)}
   .board .row{grid-template-columns:100px 1fr 110px}
   .bar .who{display:none}
   .bar .wrap{gap:12px}
@@ -230,6 +235,19 @@ footer{border-top:1px solid var(--rule);padding:24px 0;color:var(--ink-2);font-s
   <div class="tracks">
     <h2>Trending this week</h2>
     <ul class="tracklist" id="trending"></ul>
+  </div>
+
+  <!-- UC-03: no track() call here on purpose. Autocapture records these clicks as [Amplitude] Element Clicked,
+       and the business event "Playlist Card Clicked" is defined afterwards with Visual Labeling.
+       data-amp-track-* attributes arrive as [Amplitude] Element Attributes, so each card carries a stable ID. -->
+  <div class="tracks">
+    <h2>Playlists for you</h2>
+    <div class="playlists" id="playlists">
+      <button class="playlist-card" type="button" data-amp-track-playlist_id="pl_late_night_lofi" data-amp-track-genre="Lo-fi"><span class="art" style="--a:#1F9E89;--b:#14213D"></span><b>Late-night Lo-fi</b><small>42 songs for slow evenings</small></button>
+      <button class="playlist-card" type="button" data-amp-track-playlist_id="pl_monsoon_hiphop" data-amp-track-genre="Hip hop"><span class="art" style="--a:#F4A259;--b:#E63946"></span><b>Monsoon Hip hop</b><small>31 songs recorded in the rain</small></button>
+      <button class="playlist-card" type="button" data-amp-track-playlist_id="pl_synthwave_drive" data-amp-track-genre="Synthwave"><span class="art" style="--a:#7FD1C2;--b:#2C3756"></span><b>Synthwave Drive</b><small>27 songs for the highway</small></button>
+      <button class="playlist-card" type="button" data-amp-track-playlist_id="pl_sunday_soul" data-amp-track-genre="Soul"><span class="art" style="--a:#E6E9EE;--b:#F4A259"></span><b>Sunday Soul</b><small>19 songs, all live takes</small></button>
+    </div>
   </div>
 </section>
 
@@ -406,6 +424,8 @@ const amp = window.amplitude;
 const live = !!(cfg.apiKey && amp && amp.track);
 function track(name, props){ try{ if(live) return amp.track(name, props||{}); }catch(e){} }
 function toast(t){ const el=document.getElementById('toast'); el.textContent=t; el.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>el.classList.remove('show'),2200); }
+/* UC-02: what opened the paywall, and the viewer's plan (guests are Free). */
+let pendingPaywall='nav', currentPlan='Free', mastersThisSession=0;
 /* UC-01: where did a Studio visit come from? Set on the click, read when the Studio screen loads. */
 let pendingSource='direct';
 document.addEventListener('click',e=>{ const a=e.target.closest('a[href="#/studio"]'); if(a) pendingSource=a.dataset.source||(a.closest('nav')?'nav':'link'); },true);
@@ -428,6 +448,9 @@ document.getElementById('trending').addEventListener('click',e=>{
   if(r){ const s=songs[r.dataset.remix]; track('Remix Started',{track_name:s[0],genre:s[2]}); pendingSource='remix'; location.hash='#/studio'; }
 });
 
+/* UC-03: playlist cards only update the UI. Tracking comes from autocapture + Visual Labeling. */
+document.getElementById('playlists').addEventListener('click',e=>{ const c=e.target.closest('.playlist-card'); if(c) toast('Opening '+c.querySelector('b').textContent); });
+
 /* ---------- router ---------- */
 const views=[...document.querySelectorAll('section.view')];
 function route(){
@@ -440,6 +463,10 @@ function route(){
   if(v.dataset.view==='studio') props.entry_source=pendingSource; // UC-01 funnel step 1: Screen Viewed where screen = studio
   pendingSource='direct';
   track('Screen Viewed',props);
+  if(v.dataset.view==='membership'){ // UC-02 funnel step 2: the paywall is the Membership screen for non-members
+    if(currentPlan!=='Membership') track('Paywall Viewed',{trigger:pendingPaywall});
+    pendingPaywall='nav';
+  }
 }
 window.addEventListener('hashchange',route); route();
 
@@ -466,6 +493,7 @@ async function signOut(silent){
   await flushNow();
   if(live){ try{ amp.reset(); }catch(e){} }
   try{ localStorage.removeItem('mixdeck_uid'); }catch(e){}
+  currentPlan='Free';
   console.info('[Mixdeck] signed out — User ID cleared, new Device ID:', live && amp.getDeviceId ? amp.getDeviceId() : '(no SDK)');
   if(!silent){ showWho(); toast('Signed out — browsing as guest'); }
 }
@@ -482,6 +510,7 @@ async function signIn(email, plan, country){
     amp.identify(idf);
   }
   try{ localStorage.setItem('mixdeck_uid',email); }catch(e){}
+  currentPlan=plan||'Free';
   track('Signed In',{method:'email'});
   await flushNow();
   console.info('[Mixdeck] signed in', { user_id: live?amp.getUserId():email, email, plan: plan||'Free' });
@@ -574,19 +603,38 @@ pc.innerHTML=presets.map(p=>`<button class="plan" type="button" data-preset="${p
 pc.addEventListener('click',e=>{ const b=e.target.closest('[data-preset]'); if(!b) return; chosen=b.dataset.preset;
   pc.querySelectorAll('.plan').forEach(x=>x.classList.toggle('featured',x===b)); track('Mastering Preset Selected',{preset:chosen}); });
 pc.querySelector('.plan').classList.add('featured');
-document.getElementById('master-btn').onclick=()=>{ track('Mastering Started',{preset:chosen}); setTimeout(()=>{track('Mastering Completed',{preset:chosen}); toast('Mastered with '+chosen);},900); };
-// Export is gated: free users hit the paywall. Intentional friction for the replay / heatmap story.
-document.getElementById('export-btn').onclick=()=>{ track('Paywall Viewed',{trigger:'export_wav'}); location.hash='#/membership'; };
+document.getElementById('master-btn').onclick=()=>{
+  // UC-02: the Free plan allows 3 masters; the 4th attempt opens the paywall with trigger master_limit
+  if(currentPlan!=='Membership' && mastersThisSession>=3){ toast('Free plan includes 3 masters. Membership unlocks unlimited mastering.'); pendingPaywall='master_limit'; location.hash='#/membership'; return; }
+  mastersThisSession++;
+  track('Mastering Started',{preset:chosen}); setTimeout(()=>{track('Mastering Completed',{preset:chosen}); toast('Mastered with '+chosen);},900);
+};
+// Export is gated: free users hit the paywall (trigger export_wav). Members export straight away.
+document.getElementById('export-btn').onclick=()=>{
+  if(currentPlan==='Membership'){ track('Song Exported',{format:'wav'}); toast('Exported as WAV'); return; }
+  pendingPaywall='export_wav'; location.hash='#/membership';
+};
 
 /* ---------- membership ---------- */
 const dlg=document.getElementById('checkout');
 document.getElementById('trial-cta').onclick=()=>{ track('Checkout Started',{plan:'Membership'}); dlg.showModal(); };
 document.getElementById('cancel-trial').onclick=()=>{ track('Checkout Abandoned',{plan:'Membership'}); dlg.close(); };
+/* UC-02: payment confirmation is server truth. Mixdeck has no backend, so this sends the event the way a
+   payment webhook would: straight to the HTTP V2 API, with the same user_id and device_id as the browser.
+   insert_id lets Amplitude drop duplicates if the webhook retries. */
+async function sendServerEvent(event_type, event_properties, extra){
+  if(!live) return;
+  const ev=Object.assign({event_type, event_properties, device_id:amp.getDeviceId(), insert_id:uuid(), time:Date.now()}, extra||{});
+  const uid=amp.getUserId(); if(uid) ev.user_id=uid;
+  const sid=amp.getSessionId?amp.getSessionId():null; if(sid) ev.session_id=sid;
+  try{ await send(cfg.apiKey,[ev]); console.info('[Mixdeck] server-side event sent', ev); }catch(e){ console.warn('[Mixdeck] server-side event failed', e); }
+}
 document.getElementById('confirm-trial').onclick=()=>{
   const billing=document.getElementById('billing').value; const price=billing==='annual'?119.40:14.95;
-  track('Trial Started',{plan:'Membership',billing});
-  if(live){ const rev=new amp.Revenue().setProductId('membership_'+billing).setPrice(price).setQuantity(1).setRevenueType('subscription'); amp.revenue(rev);
-    const idf=new amp.Identify(); idf.set('plan','Membership'); amp.identify(idf); }
+  track('Trial Started',{plan:'Membership',billing}); // browser: what the user did on screen
+  sendServerEvent('Subscription Started',{plan:'Membership',billing,price_usd:price},
+    {price, quantity:1, productId:'membership_'+billing, revenueType:'subscription', user_properties:{$set:{plan:'Membership'}}}); // "server": the money
+  currentPlan='Membership';
   dlg.close(); toast('Trial started — welcome to Membership');
 };
 document.getElementById('free-cta').onclick=()=>track('Free Plan Kept',{});
@@ -670,10 +718,12 @@ function sessionEvents(u, start, product){
     if(made && Math.random()<.04) push('Song Publish Failed',{reason:'network_timeout'});
     if(made && Math.random()<.2+u.engaged*.45){ u.songs=(u.songs||0)+1; push('Song Published',{track_count:tracks+1,visibility:pick(['public','public','public','unlisted','private']),genre:u.genre});
       if(Math.random()<.5){ push('Screen Viewed',{screen:'mastering'}); const pr=pick(['Warm','Punchy','Open']); push('Mastering Started',{preset:pr}); push('Mastering Completed',{preset:pr});
-        if(u.plan!=='Membership' && Math.random()<.55){ push('Paywall Viewed',{trigger:'export_wav'}); push('Screen Viewed',{screen:'membership'});
+        if(u.plan!=='Membership' && Math.random()<.55){ push('Screen Viewed',{screen:'membership'}); push('Paywall Viewed',{trigger:pick(['export_wav','export_wav','master_limit','nav'])});
           if(Math.random()<.25+u.engaged*.35){ push('Checkout Started',{plan:'Membership'});
-            if(Math.random()<.62){ const billing=Math.random()<.7?'monthly':'annual'; push('Trial Started',{plan:'Membership',billing}); u.plan='Membership';
-              const last=ev[ev.length-1]; last.revenue = billing==='annual'?119.40:14.95; last.price=last.revenue; last.quantity=1; last.productId='membership_'+billing; last.revenueType='subscription'; }
+            if(Math.random()<.62){ const billing=Math.random()<.7?'monthly':'annual'; const price=billing==='annual'?119.40:14.95;
+              push('Trial Started',{plan:'Membership',billing}); u.plan='Membership';
+              push('Subscription Started',{plan:'Membership',billing,price_usd:price});
+              const last=ev[ev.length-1]; last.price=price; last.quantity=1; last.productId='membership_'+billing; last.revenueType='subscription'; }
             else push('Checkout Abandoned',{plan:'Membership'}); } } } } }
   return ev;
 }
