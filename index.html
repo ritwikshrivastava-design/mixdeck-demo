@@ -15,7 +15,8 @@
 window.MIXDECK_CONFIG = {
   apiKey: "",            // main project, e.g. "Mixdeck Web"
   satelliteKey: "",      // optional 2nd project for the Portfolio demo, e.g. "Mixdeck Studio Pro"
-  serverZone: "US"       // "US" or "EU" — match the demo org
+  serverZone: "US",      // "US" or "EU" — match the demo org
+  autocaptureMode: "full" // "full" or "minimal" — set from #/control, remembered in this browser
 };
 (function(){
   var p = new URLSearchParams(location.search);
@@ -24,6 +25,7 @@ window.MIXDECK_CONFIG = {
     if (p.get('sat')) localStorage.setItem('mixdeck_sat', p.get('sat'));
     window.MIXDECK_CONFIG.apiKey = window.MIXDECK_CONFIG.apiKey || localStorage.getItem('mixdeck_key') || "";
     window.MIXDECK_CONFIG.satelliteKey = window.MIXDECK_CONFIG.satelliteKey || localStorage.getItem('mixdeck_sat') || "";
+    window.MIXDECK_CONFIG.autocaptureMode = localStorage.getItem('mixdeck_ac') || window.MIXDECK_CONFIG.autocaptureMode;
   } catch(e){}
   var key = window.MIXDECK_CONFIG.apiKey;
   if (!key) return;
@@ -38,14 +40,18 @@ window.MIXDECK_CONFIG = {
   if (!cfg.apiKey || !window.amplitude) return;
   try {
     window.amplitude.add(window.sessionReplay.plugin({ sampleRate: 1 }));
+    // Full = everything on. Minimal = what a customer might keep after turning autocapture down:
+    // sessions, attribution and page views stay; clicks, forms, downloads and network calls must be tracked in code.
+    var full = cfg.autocaptureMode !== 'minimal';
+    cfg.autocaptureSettings = {
+      attribution: true, sessions: true, pageViews: { trackHistoryChanges: 'all' },
+      frustrationInteractions: true, webVitals: true,
+      elementInteractions: full, formInteractions: full, fileDownloads: full, networkTracking: full
+    };
     window.amplitude.init(cfg.apiKey, {
       serverZone: cfg.serverZone,
       fetchRemoteConfig: true,
-      autocapture: {
-        attribution: true, sessions: true, formInteractions: true, fileDownloads: true,
-        elementInteractions: true, frustrationInteractions: true, webVitals: true, networkTracking: true,
-        pageViews: { trackHistoryChanges: 'all' }
-      }
+      autocapture: cfg.autocaptureSettings
     });
   } catch (e) { console.warn('Amplitude init failed', e); }
   // Guides & Surveys: register as a plugin AFTER init (no engagement.init/boot when using the plugin).
@@ -145,6 +151,16 @@ p.lede{font-size:19px;color:var(--ink-2);max-width:56ch}
 .project .field{margin:0;min-width:200px}
 .project .note{font-size:14px;color:var(--ink-2);margin:0 0 10px}
 .check{display:flex;gap:10px;align-items:center;font-size:15px}
+.seg{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 14px}
+.seg button{border:1px solid var(--rule);background:transparent;border-radius:999px;padding:6px 14px;font-size:14px;font-weight:600;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--console);border-color:var(--ink)}
+.hint{font-size:13px;color:var(--ink-2);margin:-6px 0 12px}
+.profile{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:28px}
+.kv{width:100%;border-collapse:collapse;font-size:14px}
+.kv td{padding:7px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+.kv td:first-child{color:var(--ink-2);width:46%;padding-right:12px}
+.kv code{font-size:13px;word-break:break-all}
+.kv td:first-child code{word-break:normal}
 
 /* membership */
 .plans{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:36px}
@@ -183,7 +199,7 @@ dialog::backdrop{background:rgba(20,33,61,.45)}
 footer{border-top:1px solid var(--rule);padding:24px 0;color:var(--ink-2);font-size:14px}
 
 @media (max-width:860px){
-  .hero,.studio,.plans,.control{grid-template-columns:1fr}
+  .hero,.studio,.plans,.control,.profile{grid-template-columns:1fr}
   .playlists{grid-template-columns:repeat(2,1fr)}
   .board .row{grid-template-columns:100px 1fr 110px}
   .bar .who{display:none}
@@ -205,6 +221,7 @@ footer{border-top:1px solid var(--rule);padding:24px 0;color:var(--ink-2);font-s
     </nav>
     <div class="auth">
       <div class="who" id="who">Browsing as guest</div>
+      <a class="btn sm ghost" id="profile-btn" href="#/profile" hidden>Profile</a>
       <button class="btn sm ghost" id="auth-btn" type="button">Sign in</button>
     </div>
   </div>
@@ -346,6 +363,31 @@ footer{border-top:1px solid var(--rule);padding:24px 0;color:var(--ink-2);font-s
   </div>
 </section>
 
+<!-- PROFILE: user properties via identify() -->
+<section class="view" data-view="profile" aria-labelledby="h-profile">
+  <h2 id="h-profile">Your profile</h2>
+  <p class="lede">These details are saved as user properties, so every future event from you can be filtered by them.</p>
+  <div class="profile">
+    <div class="card">
+      <p id="profile-guest" style="margin:0 0 12px;color:var(--ink-2)" hidden>Sign in to edit your profile.</p>
+      <form id="profile-form" novalidate>
+        <div class="field"><label for="pf-dob">Date of birth</label><input id="pf-dob" type="date"><span class="err" id="pf-dob-err" aria-live="polite"></span></div>
+        <div class="field"><label for="pf-age">Age</label><input id="pf-age" type="number" readonly placeholder="Worked out from your date of birth"></div>
+        <div class="field"><label for="pf-gender">Gender</label>
+          <select id="pf-gender"><option value="">Choose…</option><option value="female">Female</option><option value="male">Male</option><option value="non_binary">Non-binary</option><option value="prefer_not_to_say">Prefer not to say</option></select></div>
+        <div class="field"><label for="pf-genre">Favourite genre</label>
+          <select id="pf-genre"><option value="">Choose…</option><option>Lo-fi</option><option>Hip hop</option><option>Pop</option><option>Afrobeats</option><option>Synthwave</option><option>Soul</option><option>Drill</option></select></div>
+        <button class="btn" id="profile-save" type="submit">Save profile</button>
+      </form>
+    </div>
+    <div class="card">
+      <h3>What Amplitude receives</h3>
+      <p style="color:var(--ink-2);margin:.4em 0 1em">One <code>identify()</code> call sets the user properties, and a <code>Profile Updated</code> event records the action itself.</p>
+      <table class="kv" id="profile-sent"><tr><td>Nothing sent yet</td><td></td></tr></table>
+    </div>
+  </div>
+</section>
+
 <!-- CONTROL ROOM (presenter only) -->
 <section class="view" data-view="control" aria-labelledby="h-control">
   <h2 id="h-control">Control room</h2>
@@ -367,9 +409,19 @@ footer{border-top:1px solid var(--rule);padding:24px 0;color:var(--ink-2);font-s
         </select></div>
       <div class="toolbar"><button class="btn sm" id="signin-persona" type="button">Sign in</button><button class="btn sm ghost" id="reset-id" type="button">Sign out and reset</button></div>
       <hr style="border:0;border-top:1px solid var(--rule);margin:20px 0">
+      <h3>Autocapture</h3>
+      <div class="seg" role="group" aria-label="Autocapture mode"><button type="button" data-ac="full">Full</button><button type="button" data-ac="minimal">Minimal</button></div>
+      <p class="hint">Minimal turns off element clicks, forms, file downloads and network tracking. Visual Labeling (UC-03) needs Full. Reloads the page.</p>
+      <hr style="border:0;border-top:1px solid var(--rule);margin:20px 0">
       <h3>Demo switches</h3>
       <label class="check" style="margin-top:12px"><input type="checkbox" id="force-fail"> Make the next publish fail</label>
       <p style="color:var(--ink-2);font-size:14px;margin:.6em 0 0">Shows why Song Published fires on success: the failed attempt sends Song Publish Failed instead.</p>
+    </div>
+    <div class="card">
+      <h3>How it’s wired</h3>
+      <p style="color:var(--ink-2);margin:.4em 0 1em">Live values from the SDK in this browser. Same as running <code>amplitude.getDeviceId()</code> in the console.</p>
+      <table class="kv" id="wired"></table>
+      <div class="toolbar"><button class="btn sm ghost" id="wired-refresh" type="button">Refresh</button><button class="btn sm ghost" id="copy-device" type="button">Copy device ID</button></div>
     </div>
     <div class="card">
       <h3>Seed history</h3>
@@ -397,12 +449,22 @@ footer{border-top:1px solid var(--rule);padding:24px 0;color:var(--ink-2);font-s
 </dialog>
 <dialog id="signin">
   <h3>Sign in</h3>
-  <p style="color:var(--ink-2);margin:.4em 0 1em">Use any email. Each new email becomes a new user in Amplitude.</p>
-  <div class="field">
+  <p style="color:var(--ink-2);margin:.4em 0 .8em">Choose how to sign in. Each new email or phone number becomes a new user in Amplitude.</p>
+  <div class="seg" role="group" aria-label="Sign-in method"><button type="button" data-method="email" aria-pressed="true">Email</button><button type="button" data-method="phone" aria-pressed="false">Phone</button><button type="button" data-method="otp" aria-pressed="false">One-time code</button></div>
+  <div class="field" id="f-email">
     <label for="email">Email</label>
     <input id="email" type="email" autocomplete="off" placeholder="you@example.com">
-    <span class="err" id="email-err" aria-live="polite"></span>
   </div>
+  <div class="field" id="f-phone" hidden>
+    <label for="phone">Mobile number</label>
+    <input id="phone" type="tel" autocomplete="off" placeholder="+65 8123 4567">
+  </div>
+  <div class="field" id="f-otp" hidden>
+    <label for="otp">6-digit code</label>
+    <input id="otp" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="123456">
+  </div>
+  <p class="hint" id="otp-hint" hidden>Demo code: 123456</p>
+  <span class="err" id="email-err" aria-live="polite" style="display:block;font-size:13px;color:var(--rec);min-height:1.2em"></span>
   <div class="toolbar"><button class="btn" id="confirm-signin" type="button">Sign in</button><button class="btn ghost" id="cancel-signin" type="button">Cancel</button></div>
 </dialog>
 <!-- UC-01 step 4: Song Published fires only when the publish succeeds -->
@@ -425,7 +487,7 @@ const live = !!(cfg.apiKey && amp && amp.track);
 function track(name, props){ try{ if(live) return amp.track(name, props||{}); }catch(e){} }
 function toast(t){ const el=document.getElementById('toast'); el.textContent=t; el.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>el.classList.remove('show'),2200); }
 /* UC-02: what opened the paywall, and the viewer's plan (guests are Free). */
-let pendingPaywall='nav', currentPlan='Free', mastersThisSession=0;
+let pendingPaywall='nav', currentPlan='Free', mastersThisSession=0, studioEntry='direct';
 /* UC-01: where did a Studio visit come from? Set on the click, read when the Studio screen loads. */
 let pendingSource='direct';
 document.addEventListener('click',e=>{ const a=e.target.closest('a[href="#/studio"]'); if(a) pendingSource=a.dataset.source||(a.closest('nav')?'nav':'link'); },true);
@@ -449,7 +511,10 @@ document.getElementById('trending').addEventListener('click',e=>{
 });
 
 /* UC-03: playlist cards only update the UI. Tracking comes from autocapture + Visual Labeling. */
-document.getElementById('playlists').addEventListener('click',e=>{ const c=e.target.closest('.playlist-card'); if(c) toast('Opening '+c.querySelector('b').textContent); });
+document.getElementById('playlists').addEventListener('click',e=>{ const c=e.target.closest('.playlist-card'); if(!c) return;
+  // With autocapture on Minimal there is no Element Clicked to label, so the click has to be tracked in code.
+  if(cfg.autocaptureMode==='minimal') track('Playlist Opened',{playlist_id:c.dataset.ampTrackPlaylist_id, genre:c.dataset.ampTrackGenre});
+  toast('Opening '+c.querySelector('b').textContent); });
 
 /* ---------- router ---------- */
 const views=[...document.querySelectorAll('section.view')];
@@ -460,7 +525,7 @@ function route(){
   document.querySelectorAll('nav a').forEach(a=>{ if(a.dataset.route===v.dataset.view) a.setAttribute('aria-current','page'); else a.removeAttribute('aria-current'); });
   window.scrollTo(0,0);
   const props={screen:v.dataset.view};
-  if(v.dataset.view==='studio') props.entry_source=pendingSource; // UC-01 funnel step 1: Screen Viewed where screen = studio
+  if(v.dataset.view==='studio'){ props.entry_source=pendingSource; studioEntry=pendingSource; } // UC-01 funnel step 1: Screen Viewed where screen = studio
   pendingSource='direct';
   track('Screen Viewed',props);
   if(v.dataset.view==='membership'){ // UC-02 funnel step 2: the paywall is the Membership screen for non-members
@@ -480,6 +545,7 @@ document.addEventListener('click',e=>{ const t=e.target.closest('[data-track]');
 const whoEl=document.getElementById('who');
 const authBtn=document.getElementById('auth-btn');
 const heroSignin=document.getElementById('hero-signin');
+const profileBtn=document.getElementById('profile-btn');
 function currentUser(){ try{ return (live?amp.getUserId():localStorage.getItem('mixdeck_uid')) || null; }catch(e){ return null; } }
 async function flushNow(){ try{ if(live && amp.flush){ const r=amp.flush(); if(r && r.promise) await r.promise; } }catch(e){} }
 function showWho(){
@@ -487,6 +553,7 @@ function showWho(){
   whoEl.innerHTML = id ? `Signed in as <b>${esc(id)}</b>` : 'Browsing as guest';
   authBtn.textContent = id ? 'Sign out' : 'Sign in';
   heroSignin.hidden = !!id;
+  profileBtn.hidden = !id;
 }
 async function signOut(silent){
   if(currentUser()) track('Signed Out',{});
@@ -495,41 +562,110 @@ async function signOut(silent){
   try{ localStorage.removeItem('mixdeck_uid'); }catch(e){}
   currentPlan='Free';
   console.info('[Mixdeck] signed out — User ID cleared, new Device ID:', live && amp.getDeviceId ? amp.getDeviceId() : '(no SDK)');
-  if(!silent){ showWho(); toast('Signed out — browsing as guest'); }
+  if(!silent){ showWho(); loadProfile(); toast('Signed out — browsing as guest'); }
 }
-async function signIn(email, plan, country){
+/* Phone sign-ins get an internal user ID, so the raw number is never the User ID or a user property. */
+function phoneUserId(phone){ let h=0; for(const c of phone.replace(/\D/g,'')) h=(h*31+c.charCodeAt(0))>>>0; return 'mx-'+h.toString(36); }
+async function signIn(userId, plan, country, method){
+  method=method||'email';
   const prev=currentUser();
-  if(prev && prev!==email) await signOut(true);
+  if(prev && prev!==userId) await signOut(true);
   if(live){
-    amp.setUserId(email);
+    amp.setUserId(userId);
     const idf=new amp.Identify();
-    idf.set('email', email);
+    if(method==='email') idf.set('email', userId);
     idf.set('plan', plan||'Free');
     if(country) idf.set('country_label', country);
     idf.set('creator_type','Producer');
+    idf.set('last_sign_in_method', method);      // user property: changes every sign-in
+    idf.setOnce('first_sign_in_method', method); // user property: kept from the very first sign-in
     amp.identify(idf);
   }
-  try{ localStorage.setItem('mixdeck_uid',email); }catch(e){}
+  try{ localStorage.setItem('mixdeck_uid',userId); }catch(e){}
   currentPlan=plan||'Free';
-  track('Signed In',{method:'email'});
+  track('Signed In',{method}); // event property: describes this one sign-in
   await flushNow();
-  console.info('[Mixdeck] signed in', { user_id: live?amp.getUserId():email, email, plan: plan||'Free' });
-  showWho(); toast('Signed in as '+email);
+  console.info('[Mixdeck] signed in', { user_id: live?amp.getUserId():userId, method, plan: plan||'Free' });
+  showWho(); loadProfile(); toast('Signed in');
 }
 const dlgSign=document.getElementById('signin');
 const emailIn=document.getElementById('email'), emailErr=document.getElementById('email-err');
-function openSignIn(){ emailIn.value=''; emailErr.textContent=''; dlgSign.showModal(); emailIn.focus(); }
+const phoneIn=document.getElementById('phone'), otpIn=document.getElementById('otp');
+const confirmSignBtn=document.getElementById('confirm-signin');
+let signMethod='email', otpSent=false;
+function setMethod(m){
+  signMethod=m; otpSent=false; emailErr.textContent='';
+  dlgSign.querySelectorAll('[data-method]').forEach(b=>b.setAttribute('aria-pressed', b.dataset.method===m));
+  document.getElementById('f-email').hidden = m!=='email';
+  document.getElementById('f-phone').hidden = m==='email';
+  document.getElementById('f-otp').hidden = true; document.getElementById('otp-hint').hidden = true;
+  confirmSignBtn.textContent = m==='otp' ? 'Send code' : 'Sign in';
+  (m==='email'?emailIn:phoneIn).focus();
+}
+dlgSign.querySelector('.seg').addEventListener('click',e=>{ const b=e.target.closest('[data-method]'); if(b) setMethod(b.dataset.method); });
+function openSignIn(){ emailIn.value=''; phoneIn.value=''; otpIn.value=''; dlgSign.showModal(); setMethod('email'); }
 function submitSignIn(){
-  const v=emailIn.value.trim();
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)){ emailErr.textContent='Enter an email like you@example.com'; emailIn.focus(); return; }
-  dlgSign.close(); signIn(v);
+  emailErr.textContent='';
+  if(signMethod==='email'){
+    const v=emailIn.value.trim();
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)){ emailErr.textContent='Enter an email like you@example.com'; emailIn.focus(); return; }
+    dlgSign.close(); signIn(v,null,null,'email'); return;
+  }
+  const phone=phoneIn.value.trim();
+  if(phone.replace(/\D/g,'').length<8){ emailErr.textContent='Enter a mobile number with at least 8 digits'; phoneIn.focus(); return; }
+  if(signMethod==='phone'){ dlgSign.close(); signIn(phoneUserId(phone),null,null,'phone'); return; }
+  if(!otpSent){ // OTP step 1: request a code
+    otpSent=true; track('OTP Requested',{channel:'sms'});
+    document.getElementById('f-otp').hidden=false; document.getElementById('otp-hint').hidden=false;
+    confirmSignBtn.textContent='Verify and sign in'; otpIn.focus(); return;
+  }
+  if(otpIn.value.trim()!=='123456'){ emailErr.textContent='That code is not right. Use 123456 for the demo.'; track('OTP Failed',{channel:'sms'}); otpIn.focus(); return; }
+  dlgSign.close(); signIn(phoneUserId(phone),null,null,'otp');
 }
 heroSignin.onclick=openSignIn;
 authBtn.onclick=()=>{ if(currentUser()) signOut(); else openSignIn(); };
 document.getElementById('cancel-signin').onclick=()=>dlgSign.close();
 document.getElementById('confirm-signin').onclick=submitSignIn;
-emailIn.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); submitSignIn(); } });
-showWho();
+[emailIn,phoneIn,otpIn].forEach(el=>el.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); submitSignIn(); } }));
+
+/* ---------- profile: user properties via identify() ---------- */
+const pfForm=document.getElementById('profile-form'), pfDob=document.getElementById('pf-dob'), pfAge=document.getElementById('pf-age');
+const pfGender=document.getElementById('pf-gender'), pfGenre=document.getElementById('pf-genre'), pfErr=document.getElementById('pf-dob-err');
+pfDob.max=new Date().toISOString().slice(0,10);
+function ageFrom(dob){ const d=new Date(dob), n=new Date(); let a=n.getFullYear()-d.getFullYear(); if(n<new Date(n.getFullYear(),d.getMonth(),d.getDate())) a--; return a; }
+function ageBand(a){ return a<18?'under_18':a<25?'18_24':a<35?'25_34':a<45?'35_44':a<55?'45_54':'55_plus'; }
+pfDob.addEventListener('input',()=>{ pfAge.value = pfDob.value ? ageFrom(pfDob.value) : ''; });
+function profileKey(){ return 'mixdeck_profile_'+(currentUser()||''); }
+function loadProfile(){
+  const signed=!!currentUser();
+  document.getElementById('profile-guest').hidden=signed;
+  pfForm.querySelectorAll('input,select,button').forEach(el=>el.disabled=!signed);
+  let p={}; try{ p=JSON.parse(localStorage.getItem(profileKey())||'{}'); }catch(e){}
+  pfDob.value=p.date_of_birth||''; pfAge.value=p.age??''; pfGender.value=p.gender||''; pfGenre.value=p.favourite_genre||'';
+}
+function showSent(props){
+  document.getElementById('profile-sent').innerHTML = Object.entries(props).map(([k,v])=>`<tr><td><code>${esc(k)}</code></td><td>${esc(Array.isArray(v)?v.join(', '):v)}</td></tr>`).join('');
+}
+pfForm.addEventListener('submit',e=>{
+  e.preventDefault(); pfErr.textContent='';
+  if(!currentUser()){ openSignIn(); return; }
+  if(!pfDob.value || new Date(pfDob.value)>new Date()){ pfErr.textContent='Enter a date of birth in the past'; pfDob.focus(); return; }
+  let old={}; try{ old=JSON.parse(localStorage.getItem(profileKey())||'{}'); }catch(e){}
+  const age=ageFrom(pfDob.value);
+  const p={date_of_birth:pfDob.value, age, age_band:ageBand(age)};
+  if(pfGender.value) p.gender=pfGender.value;
+  if(pfGenre.value) p.favourite_genre=pfGenre.value;
+  const changed=Object.keys(p).filter(k=>old[k]!==p[k]);
+  const btn=document.getElementById('profile-save'); btn.disabled=true; btn.textContent='Saving…';
+  setTimeout(()=>{ // stands in for the profile API success
+    if(live){ const idf=new amp.Identify(); Object.entries(p).forEach(([k,v])=>idf.set(k,v)); amp.identify(idf); }
+    track('Profile Updated',{fields_changed:changed, fields_changed_count:changed.length});
+    try{ localStorage.setItem(profileKey(), JSON.stringify(p)); }catch(e){}
+    showSent(Object.assign({'event: Profile Updated':'fields_changed = '+(changed.join(', ')||'none')}, Object.fromEntries(Object.entries(p).map(([k,v])=>['user property: '+k, v]))));
+    btn.disabled=false; btn.textContent='Save profile'; toast('Profile saved');
+  },500);
+});
+showWho(); loadProfile();
 
 /* ---------- studio ----------
    UC-01 funnel: Screen Viewed (screen = studio) -> Project Created -> Track Uploaded or Track Recorded -> Song Published
@@ -590,8 +726,8 @@ document.getElementById('confirm-publish').onclick=()=>{
   setTimeout(()=>{ // stands in for the publish API response
     btn.disabled=false; btn.textContent='Publish'; dlgPub.close();
     if(fail){ failSwitch.checked=false; track('Song Publish Failed',{reason:'network_timeout'}); toast('Publish failed. Check your connection and try again.'); return; }
-    track('Song Published',{track_count:n,visibility,genre});
-    if(live){ try{ const idf=new amp.Identify(); idf.add('songs_published',1); idf.setOnce('first_publish_date',new Date().toISOString().slice(0,10)); amp.identify(idf); }catch(e){} }
+    track('Song Published',{track_count:n,visibility,genre,is_remix:studioEntry==='remix'});
+    if(live){ try{ const idf=new amp.Identify(); idf.add('songs_published',1); idf.setOnce('first_publish_date',new Date().toISOString().slice(0,10)); idf.set('last_published_genre',genre); amp.identify(idf); }catch(e){} }
     toast('Published — your song is live');
   },900);
 };
@@ -680,7 +816,27 @@ mark(stMain,live,live?'connected':(cfg.apiKey?'key set, SDK not loaded':'not set
 mark(stSat,!!cfg.satelliteKey,cfg.satelliteKey?'key set':'not set');
 document.getElementById('k-main').value=cfg.apiKey||''; document.getElementById('k-sat').value=cfg.satelliteKey||'';
 document.getElementById('save-keys').onclick=()=>{ try{ localStorage.setItem('mixdeck_key',document.getElementById('k-main').value.trim()); localStorage.setItem('mixdeck_sat',document.getElementById('k-sat').value.trim()); }catch(e){} location.reload(); };
-document.getElementById('signin-persona').onclick=()=>{ const [e,p,c]=document.getElementById('persona').value.split('|'); signIn(e,p,c); };
+document.getElementById('signin-persona').onclick=()=>{ const [e,p,c]=document.getElementById('persona').value.split('|'); signIn(e,p,c,'email'); };
+/* autocapture switch */
+const acMode=cfg.autocaptureMode==='minimal'?'minimal':'full';
+document.querySelectorAll('[data-ac]').forEach(b=>{ b.setAttribute('aria-pressed', b.dataset.ac===acMode);
+  b.onclick=()=>{ if(b.dataset.ac===acMode) return; try{ localStorage.setItem('mixdeck_ac', b.dataset.ac); }catch(e){} location.reload(); }; });
+/* how it's wired */
+function maskKey(k){ return k ? k.slice(0,4)+'…'+k.slice(-4) : 'not set'; }
+function renderWired(){
+  const s=cfg.autocaptureSettings||{};
+  const on=k=>s[k]?'on':'off';
+  const rows=[
+    ['API key', maskKey(cfg.apiKey)], ['Server zone', cfg.serverZone], ['SDK loaded', live?'yes':'no'],
+    ['User ID', live?(amp.getUserId()||'none (guest)'):'-'], ['Device ID', live?amp.getDeviceId():'-'], ['Session ID', live&&amp.getSessionId?amp.getSessionId():'-'],
+    ['Autocapture mode', acMode], ['Element clicks', on('elementInteractions')], ['Form interactions', on('formInteractions')],
+    ['File downloads', on('fileDownloads')], ['Network tracking', on('networkTracking')], ['Page views, sessions, attribution', 'on']
+  ];
+  document.getElementById('wired').innerHTML=rows.map(([k,v])=>`<tr><td>${k}</td><td><code>${esc(v)}</code></td></tr>`).join('');
+}
+document.getElementById('wired-refresh').onclick=renderWired;
+document.getElementById('copy-device').onclick=()=>{ if(!live){ toast('SDK not loaded'); return; } navigator.clipboard.writeText(amp.getDeviceId()).then(()=>toast('Device ID copied'),()=>toast(amp.getDeviceId())); };
+renderWired();
 document.getElementById('reset-id').onclick=()=>signOut();
 
 const logEl=document.getElementById('log'); function log(t){ logEl.textContent+=t+'\n'; logEl.scrollTop=logEl.scrollHeight; }
@@ -694,14 +850,18 @@ function makeUser(i, prefix){
   const country=pick(['Singapore','India','Australia','Indonesia','Philippines','Japan','United States']);
   const platform=pick(['iOS','iOS','Android','Android','Web']);
   const engaged=Math.random(); // 0..1
+  const age=Math.round(rnd(16,52));
   return {user_id:`${prefix}-creator-${String(i).padStart(4,'0')}@mixdeck.app`, device_id:uuid(), country, platform, engaged,
-    genre:pick(['Lo-fi','Hip hop','Pop','Afrobeats','Synthwave','Soul','Drill'])};
+    genre:pick(['Lo-fi','Hip hop','Pop','Afrobeats','Synthwave','Soul','Drill']),
+    method:pick(['email','email','phone','otp','otp']), age, age_band:ageBand(age),
+    gender:pick(['female','male','male','female','non_binary','prefer_not_to_say'])};
 }
 function sessionEvents(u, start, product){
   start=Math.round(start); const ev=[]; let t=start; const sid=start;
   const push=(type,props)=>{ t+=rnd(8,90)*1000; ev.push({user_id:u.user_id,device_id:u.device_id,session_id:sid,time:Math.round(t),event_type:type,
     event_properties:props||{},platform:u.platform,country:u.country,insert_id:uuid(),
-    user_properties:{email:u.user_id,plan:u.plan||'Free',creator_type:u.engaged>.6?'Producer':'Hobbyist',favourite_genre:u.genre,product:product,songs_published:u.songs||0}}); };
+    user_properties:{email:u.user_id,plan:u.plan||'Free',creator_type:u.engaged>.6?'Producer':'Hobbyist',favourite_genre:u.genre,product:product,songs_published:u.songs||0,last_sign_in_method:u.method,age:u.age,age_band:u.age_band,gender:u.gender}}); };
+  push('Signed In',{method:u.method});
   push('Screen Viewed',{screen:'discover'});
   const plays=Math.floor(rnd(1,5)); for(let k=0;k<plays;k++) push('Track Played',{source:'trending',genre:pick(['Lo-fi','Hip hop','Pop','Soul'])});
   if(Math.random()<.35+u.engaged*.5){
