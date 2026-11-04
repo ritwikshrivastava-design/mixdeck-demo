@@ -746,7 +746,14 @@ document.getElementById('master-btn').onclick=()=>{
   // UC-02: the Free plan allows 3 masters; the 4th attempt opens the paywall with trigger master_limit
   if(currentPlan!=='Membership' && mastersThisSession>=3){ toast('Free plan includes 3 masters. Membership unlocks unlimited mastering.'); pendingPaywall='master_limit'; location.hash='#/membership'; return; }
   mastersThisSession++;
-  track('Mastering Started',{preset:chosen}); setTimeout(()=>{track('Mastering Completed',{preset:chosen}); toast('Mastered with '+chosen);},900);
+    const t0=performance.now(); // E2: start the stopwatch
+  const preset=chosen;        // lock in the preset used for THIS master
+  track('Mastering Started',{preset});
+  setTimeout(()=>{
+    const processing_ms=Math.round(performance.now()-t0); // E2: stop the stopwatch
+    track('Mastering Completed',{preset, processing_ms}); // NEW event property
+    toast('Mastered with '+preset);
+  },900);
 };
 // Export is gated: free users hit the paywall (trigger export_wav). Members export straight away.
 document.getElementById('export-btn').onclick=()=>{
