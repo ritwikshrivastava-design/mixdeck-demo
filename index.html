@@ -506,7 +506,10 @@ const songs=[["Night Bus Home","maya.k","Lo-fi"],["Monsoon Mixtape","arjun.beats
 document.getElementById('trending').innerHTML=songs.map((s,i)=>`<li><button class="play" type="button" aria-label="Play ${s[0]}" data-play="${i}"><svg viewBox="0 0 10 12"><path d="M0 0l10 6-10 6z" fill="currentColor"/></svg></button><div class="meta"><b>${s[0]}</b><small>by ${s[1]}</small></div><span class="genre">${s[2]}</span><button class="btn sm ghost" type="button" data-remix="${i}">Remix</button></li>`).join('');
 document.getElementById('trending').addEventListener('click',e=>{
   const p=e.target.closest('[data-play]'), r=e.target.closest('[data-remix]');
-  if(p){ const s=songs[p.dataset.play]; track('Track Played',{track_name:s[0],genre:s[2],source:'trending'}); toast('Playing '+s[0]); }
+    if(p){ const s=songs[p.dataset.play]; const pos=+p.dataset.play+1; // row in the list, 1 = top
+    track('Track Played',{track_name:s[0],genre:s[2],source:'trending',list_position:pos}); // NEW event property
+    if(live){ const idf=new amp.Identify(); idf.add('total_plays',1); amp.identify(idf); } // NEW user property
+    toast('Playing '+s[0]); }
   if(r){ const s=songs[r.dataset.remix]; track('Remix Started',{track_name:s[0],genre:s[2]}); pendingSource='remix'; location.hash='#/studio'; }
 });
 
