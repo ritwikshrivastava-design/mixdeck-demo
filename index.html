@@ -778,21 +778,22 @@ async function sendServerEvent(event_type, event_properties, extra){
 document.getElementById('confirm-trial').onclick=()=>{
   const billing=document.getElementById('billing').value; const price=billing==='annual'?119.40:14.95;
     const today=new Date().toISOString().slice(0,10);
+    // User properties FIRST, so they're stamped on the Trial Started event below
+  if(live){
+    const idf=new amp.Identify();
+    idf.setOnce('first_trial_date', today); // first trial ever, never overwritten
+    idf.set('billing_period', billing);     // latest billing choice
+    idf.add('trials_started', 1);           // counter
+    amp.identify(idf);
+  }
   // Event properties: details about THIS trial start
   track('Trial Started',{
     plan:'Membership',
-    billing,                            // existing: monthly or annual
-    price_usd:price,                    // NEW: number
-    trial_days:7,                       // NEW: number
-    paywall_trigger:lastPaywallTrigger  // NEW: which paywall led here
+    billing,
+    price_usd:price,
+    trial_days:7,
+    paywall_trigger:lastPaywallTrigger
   });
-  // User properties: traits of the PERSON, kept on all their future events
-  if(live){
-    const idf=new amp.Identify();
-    idf.setOnce('first_trial_date', today); // NEW: first trial ever, never overwritten
-    idf.set('billing_period', billing);     // NEW: latest billing choice
-    idf.add('trials_started', 1);           // NEW: counter
-    amp.identify(idf);
   }
   sendServerEvent('Subscription Started',{plan:'Membership',billing,price_usd:price},
     {price, quantity:1, productId:'membership_'+billing, revenueType:'subscription', user_properties:{$set:{plan:'Membership'}}}); // "server": the money
