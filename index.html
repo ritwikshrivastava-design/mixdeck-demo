@@ -16,7 +16,7 @@ window.MIXDECK_CONFIG = {
   apiKey: "",            // main project, e.g. "Mixdeck Web"
   satelliteKey: "",      // optional 2nd project for the Portfolio demo, e.g. "Mixdeck Studio Pro"
   serverZone: "US",      // "US" or "EU" — match the demo org
-  autocaptureMode: "full" // "full" or "minimal" — set from #/control, remembered in this browser
+  autocaptureMode: "full" // "full" or "minimal" — set from #/control, remembered in this browser paywall_trigger:lastPaywallTrigger
 };
 (function(){
   var p = new URLSearchParams(location.search);
@@ -794,7 +794,7 @@ document.getElementById('confirm-trial').onclick=()=>{
     trial_days:7,
     paywall_trigger:lastPaywallTrigger
   });
-  }
+  
   sendServerEvent('Subscription Started',{plan:'Membership',billing,price_usd:price},
     {price, quantity:1, productId:'membership_'+billing, revenueType:'subscription', user_properties:{$set:{plan:'Membership'}}}); // "server": the money
   currentPlan='Membership';
