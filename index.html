@@ -487,7 +487,7 @@ const live = !!(cfg.apiKey && amp && amp.track);
 function track(name, props){ try{ if(live) return amp.track(name, props||{}); }catch(e){} }
 function toast(t){ const el=document.getElementById('toast'); el.textContent=t; el.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>el.classList.remove('show'),2200); }
 /* UC-02: what opened the paywall, and the viewer's plan (guests are Free). */
-let pendingPaywall='nav', currentPlan='Free', mastersThisSession=0, studioEntry='direct';
+let pendingPaywall='nav', currentPlan='Free', mastersThisSession=0, studioEntry='direct', lastPaywallTrigger='nav';
 /* UC-01: where did a Studio visit come from? Set on the click, read when the Studio screen loads. */
 let pendingSource='direct';
 document.addEventListener('click',e=>{ const a=e.target.closest('a[href="#/studio"]'); if(a) pendingSource=a.dataset.source||(a.closest('nav')?'nav':'link'); },true);
@@ -532,7 +532,7 @@ function route(){
   pendingSource='direct';
   track('Screen Viewed',props);
   if(v.dataset.view==='membership'){ // UC-02 funnel step 2: the paywall is the Membership screen for non-members
-    if(currentPlan!=='Membership') track('Paywall Viewed',{trigger:pendingPaywall});
+        if(currentPlan!=='Membership'){ track('Paywall Viewed',{trigger:pendingPaywall}); lastPaywallTrigger=pendingPaywall; }
     pendingPaywall='nav';
   }
 }
@@ -777,7 +777,23 @@ async function sendServerEvent(event_type, event_properties, extra){
 }
 document.getElementById('confirm-trial').onclick=()=>{
   const billing=document.getElementById('billing').value; const price=billing==='annual'?119.40:14.95;
-  track('Trial Started',{plan:'Membership',billing}); // browser: what the user did on screen
+    const today=new Date().toISOString().slice(0,10);
+  // Event properties: details about THIS trial start
+  track('Trial Started',{
+    plan:'Membership',
+    billing,                            // existing: monthly or annual
+    price_usd:price,                    // NEW: number
+    trial_days:7,                       // NEW: number
+    paywall_trigger:lastPaywallTrigger  // NEW: which paywall led here
+  });
+  // User properties: traits of the PERSON, kept on all their future events
+  if(live){
+    const idf=new amp.Identify();
+    idf.setOnce('first_trial_date', today); // NEW: first trial ever, never overwritten
+    idf.set('billing_period', billing);     // NEW: latest billing choice
+    idf.add('trials_started', 1);           // NEW: counter
+    amp.identify(idf);
+  }
   sendServerEvent('Subscription Started',{plan:'Membership',billing,price_usd:price},
     {price, quantity:1, productId:'membership_'+billing, revenueType:'subscription', user_properties:{$set:{plan:'Membership'}}}); // "server": the money
   currentPlan='Membership';
